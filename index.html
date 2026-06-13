@@ -155,6 +155,43 @@
   .pay-summary{padding:12px 14px;background:#f8f0f2;border-top:2px solid var(--maroon);font-size:12px;color:var(--muted);}
   .copy-banner{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--dark);color:#fff;padding:12px 22px;border-radius:8px;font-size:14px;font-weight:600;border:1px solid var(--gold);transition:transform 0.2s ease;pointer-events:none;white-space:nowrap;z-index:200;max-width:90vw;text-align:center;}
   .copy-banner.show{transform:translateX(-50%) translateY(0);}
+  /* ── HOMEPAGE ── */
+  #homepage{position:fixed;inset:0;background:var(--dark);z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px 20px;overflow-y:auto;}
+  #homepage.hidden{display:none;}
+  .home-logo{text-align:center;margin-bottom:28px;}
+  .home-logo .home-title{font-size:26px;font-weight:900;color:#fff;margin-top:10px;letter-spacing:-0.5px;}
+  .home-logo .home-title span{color:var(--gold);}
+  .home-logo .home-sub{font-size:11px;color:#7a9ab0;letter-spacing:1.5px;text-transform:uppercase;margin-top:4px;}
+  .home-choice{display:flex;flex-direction:column;gap:12px;width:100%;max-width:320px;}
+  .home-choice-btn{padding:18px 16px;border:none;border-radius:12px;font-size:15px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:12px;text-align:left;}
+  .home-choice-btn.ref{background:#1a2f5a;color:#fff;border:1px solid #2a4a8a;}
+  .home-choice-btn.comm{background:#1a0f20;color:var(--gold);border:1px solid var(--gold);}
+  .home-choice-btn .hcb-icon{font-size:26px;flex-shrink:0;}
+  .home-choice-btn .hcb-title{font-size:15px;font-weight:800;}
+  .home-choice-btn .hcb-sub{font-size:11px;opacity:0.65;margin-top:2px;font-weight:400;}
+  .home-screen{display:none;width:100%;max-width:340px;}
+  .home-screen.active{display:block;}
+  .home-back{background:transparent;border:none;color:#7a9ab0;font-size:13px;cursor:pointer;padding:0 0 16px;display:flex;align-items:center;gap:4px;}
+  .home-heading{font-size:20px;font-weight:800;color:#fff;margin-bottom:4px;}
+  .home-sub-text{font-size:13px;color:#7a9ab0;margin-bottom:20px;line-height:1.5;}
+  .home-field{margin-bottom:14px;}
+  .home-field label{display:block;font-size:11px;font-weight:700;color:#7a9ab0;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:5px;}
+  .home-input{width:100%;background:#1a2545;border:1px solid #2a3a6a;color:#fff;border-radius:8px;padding:12px 14px;font-size:15px;outline:none;}
+  .home-input:focus{border-color:var(--gold);}
+  .home-input::placeholder{color:#4a5a7a;}
+  .home-pin-input{width:100%;background:#1a2545;border:2px solid #2a3a6a;color:#fff;border-radius:8px;padding:14px;font-size:28px;text-align:center;letter-spacing:10px;outline:none;}
+  .home-pin-input:focus{border-color:var(--gold);}
+  .home-btn{width:100%;padding:15px;background:var(--gold);color:var(--dark);border:none;border-radius:10px;font-size:16px;font-weight:800;cursor:pointer;margin-top:6px;}
+  .home-btn.secondary{background:#1a2f5a;color:#fff;border:1px solid #2a4a8a;margin-top:8px;}
+  .home-error{color:#e07070;font-size:12px;margin-top:8px;min-height:16px;text-align:center;}
+  .zelle-row{display:flex;gap:8px;margin-top:6px;}
+  .zelle-opt{flex:1;padding:10px;background:#1a2545;border:1px solid #2a3a6a;border-radius:8px;color:#7a9ab0;font-size:13px;font-weight:700;cursor:pointer;text-align:center;}
+  .zelle-opt.selected{background:#1a3a7a;border-color:var(--gold);color:#fff;}
+  .ref-list-item{display:flex;align-items:center;gap:10px;padding:12px 14px;background:#1a2545;border-radius:8px;margin-bottom:8px;cursor:pointer;border:1px solid #2a3a6a;}
+  .ref-list-item:active{border-color:var(--gold);}
+  .ref-list-avatar{width:36px;height:36px;border-radius:50%;background:var(--maroon);color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;}
+  .ref-list-name{font-size:14px;font-weight:600;color:#fff;}
+  .ref-list-sub{font-size:11px;color:#5a7a9a;margin-top:1px;}
   .cancel-game-btn{font-size:11px;font-weight:700;color:#c0392b;background:#ffeaea;border:1px solid #f0b0b0;border-radius:5px;padding:5px 12px;cursor:pointer;white-space:nowrap;min-height:30px;}
   .cancellation-row{background:#fff3f3;border-left:4px solid #c0392b;padding:10px 14px;border-bottom:1px solid #f0c8c8;display:flex;flex-direction:column;gap:4px;}
   .cancellation-section-header{background:#c0392b;color:#fff;padding:7px 14px;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;font-weight:700;}
@@ -404,6 +441,89 @@
   </div>
 </div>
 
+<!-- ── HOMEPAGE ── -->
+<div id="homepage">
+  <!-- Logo -->
+  <div class="home-logo">
+    <div style="display:flex;gap:10px;justify-content:center;align-items:center;">
+      <div id="hp-ihl-logo" style="width:56px;height:56px;border-radius:50%;overflow:hidden;flex-shrink:0;"></div>
+      <div id="hp-fhl-logo" style="width:56px;height:56px;border-radius:50%;overflow:hidden;flex-shrink:0;"></div>
+    </div>
+    <div class="home-title">IDH<span>F</span></div>
+    <div class="home-sub">Ref Game Picker</div>
+  </div>
+
+  <!-- Screen: choice -->
+  <div class="home-screen active" id="hp-choice">
+    <div class="home-choice">
+      <button class="home-choice-btn ref" onclick="hpShowRefEntry()">
+        <span class="hcb-icon">🏒</span>
+        <div><div class="hcb-title">I'm a Ref</div><div class="hcb-sub">Sign in or create your profile</div></div>
+      </button>
+      <button class="home-choice-btn comm" onclick="hpShowComm()">
+        <span class="hcb-icon">⛳</span>
+        <div><div class="hcb-title">Commissioner</div><div class="hcb-sub">Enter your PIN to manage games</div></div>
+      </button>
+    </div>
+  </div>
+
+  <!-- Screen: ref — returning or new -->
+  <div class="home-screen" id="hp-ref-entry">
+    <button class="home-back" onclick="hpShow('choice')">Back</button>
+    <div class="home-heading">Welcome Back?</div>
+    <div class="home-sub-text">Pick your name if you've reffed before, or create a new profile.</div>
+    <div id="hp-ref-list" style="max-height:280px;overflow-y:auto;margin-bottom:12px;"></div>
+    <button class="home-btn secondary" onclick="hpShowNewRef()">✨ I'm New — Create Profile</button>
+    <div class="home-error" id="hp-ref-entry-error"></div>
+  </div>
+
+  <!-- Screen: returning ref PIN -->
+  <div class="home-screen" id="hp-ref-pin">
+    <button class="home-back" onclick="hpShow('ref-entry')">Back</button>
+    <div class="home-heading" id="hp-ref-pin-name"></div>
+    <div class="home-sub-text">Enter your 3-digit PIN to sign in.</div>
+    <input class="home-pin-input" id="hp-ref-pin-input" type="tel" inputmode="numeric" maxlength="3" placeholder="• • •" autocomplete="off">
+    <div class="home-error" id="hp-ref-pin-error"></div>
+    <button class="home-btn" onclick="hpCheckRefPin()" style="margin-top:14px;">Sign In</button>
+  </div>
+
+  <!-- Screen: new ref profile -->
+  <div class="home-screen" id="hp-new-ref">
+    <button class="home-back" onclick="hpShow('ref-entry')">Back</button>
+    <div class="home-heading">Create Your Profile</div>
+    <div class="home-sub-text">Fill in your info — you'll use this PIN to access pay details.</div>
+    <div class="home-field"><label>First Name</label><input class="home-input" id="hp-first" type="text" placeholder="First" autocomplete="given-name"></div>
+    <div class="home-field"><label>Last Name</label><input class="home-input" id="hp-last" type="text" placeholder="Last" autocomplete="family-name"></div>
+    <div class="home-field"><label>Phone</label><input class="home-input" id="hp-phone" type="tel" placeholder="(555) 555-5555" autocomplete="tel"></div>
+    <div class="home-field"><label>Email</label><input class="home-input" id="hp-email" type="email" placeholder="you@email.com" autocomplete="email"></div>
+    <div class="home-field">
+      <label>Zelle for payment?</label>
+      <div class="zelle-row">
+        <div class="zelle-opt" id="zelle-phone" onclick="hpZelle('phone')">📱 Yes — same as phone</div>
+        <div class="zelle-opt" id="zelle-other" onclick="hpZelle('other')">✏️ Yes — different</div>
+        <div class="zelle-opt" id="zelle-no" onclick="hpZelle('no')">✗ No</div>
+      </div>
+    </div>
+    <div class="home-field" id="hp-zelle-other-field" style="display:none;">
+      <label>Zelle Email / Phone</label>
+      <input class="home-input" id="hp-zelle-other-val" type="text" placeholder="Zelle email or number">
+    </div>
+    <div class="home-field"><label>Pick a 3-digit PIN</label><input class="home-pin-input" id="hp-new-pin" type="tel" inputmode="numeric" maxlength="3" placeholder="• • •" autocomplete="off" style="font-size:22px;padding:12px;letter-spacing:8px;"></div>
+    <div class="home-error" id="hp-new-ref-error"></div>
+    <button class="home-btn" onclick="hpCreateRef()">Create Profile & Sign In</button>
+  </div>
+
+  <!-- Screen: commissioner PIN -->
+  <div class="home-screen" id="hp-comm">
+    <button class="home-back" onclick="hpShow('choice')">Back</button>
+    <div class="home-heading">Commissioner Access</div>
+    <div class="home-sub-text">Enter your 4-digit PIN.</div>
+    <input class="home-pin-input" id="hp-comm-pin" type="password" inputmode="numeric" maxlength="6" placeholder="••••" autocomplete="off">
+    <div class="home-error" id="hp-comm-error"></div>
+    <button class="home-btn" onclick="hpCheckCommPin()" style="margin-top:14px;">Enter</button>
+  </div>
+</div>
+
 <main>
   <!-- Commissioner impersonation banner -->
   <div id="comm-impersonate-bar" style="display:none;">
@@ -434,7 +554,7 @@
     <span id="comm-cancel-alert" style="display:none;background:#c0392b;color:#fff;font-size:10px;font-weight:700;border-radius:4px;padding:2px 8px;">⚠ <span id="comm-cancel-count">0</span> cancellation<span id="comm-cancel-plural"></span></span>
     <div style="display:flex;gap:6px;margin-left:auto;">
       <button class="reset-btn" onclick="openReset()">↺ Reset All</button>
-      <button class="comm-lock-btn" onclick="lockComm()">🔒 Exit</button>
+      <button class="comm-lock-btn" onclick="lockCommToHome()">🔒 Exit</button>
     </div>
   </div>
 
@@ -519,7 +639,8 @@
         <div id="profile-game-list"></div>
       </div>
       <div class="profile-section" style="padding:12px 16px;">
-        <button onclick="lockProfile()" style="width:100%;padding:10px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:13px;cursor:pointer;">🔒 Lock Profile</button>
+        <button onclick="lockProfile()" style="width:100%;padding:10px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:13px;cursor:pointer;margin-bottom:8px;">🔒 Lock Profile</button>
+        <button onclick="signOutRef()" style="width:100%;padding:10px;background:transparent;border:1px solid #c0392b;border-radius:6px;color:#c0392b;font-size:13px;cursor:pointer;">↩ Sign Out</button>
       </div>
     </div>
   </div>
@@ -1448,6 +1569,15 @@ function showProfileContent(name){
 }
 
 function lockProfile(){_profileUnlocked=null;renderProfileTab();if(document.querySelector('.tab.active').id==='tab-mypay')renderMyPay();}
+function signOutRef(){
+  _profileUnlocked=null;
+  const sel=document.getElementById('officialSelect');
+  sel.value='';
+  localStorage.removeItem('idhf-last-official');
+  document.getElementById('homepage').classList.remove('hidden');
+  hpShow('choice');
+  switchTab('ihl');
+}
 
 // ── EDIT OWN PROFILE (ref) ────────────────────────────────────────────────
 function openRefEditProfile(en){
@@ -1636,15 +1766,193 @@ async function initFirebase(){
     if(data){availability=data.availability||{};approved=data.approved||{};localStorage.setItem('idhf-avail',JSON.stringify(availability));localStorage.setItem('idhf-approved',JSON.stringify(approved));refreshCurrentTab();updateMineBadge();updateCommPendingAlert();}
     else await fbSet('state',{availability,approved});
     setSyncStatus('● Live','#5a9a5a');startPolling();
-  }catch(e){setSyncStatus('⚠ '+e.message,'#c0392b');}
+    hpInit(); // Show homepage now that roster is loaded
+  }catch(e){setSyncStatus('⚠ '+e.message,'#c0392b');hpInit();}
+}
+
+// ── HOMEPAGE ──────────────────────────────────────────────────────────────
+let _hpZelleChoice='no',_hpSelectedRef=null;
+
+function hpInit(){
+  // Copy logos into homepage
+  const ihlImg=document.querySelector('header img[alt="IHL"]');
+  const fhlImg=document.querySelector('header img[alt="FHL"]');
+  if(ihlImg){const c=document.getElementById('hp-ihl-logo');if(c){const i=ihlImg.cloneNode();i.style.cssText='width:56px;height:56px;border-radius:50%;object-fit:cover;';c.appendChild(i);}}
+  if(fhlImg){const c=document.getElementById('hp-fhl-logo');if(c){const i=fhlImg.cloneNode();i.style.cssText='width:56px;height:56px;border-radius:50%;object-fit:cover;';c.appendChild(i);}}
+  // Check if already signed in
+  const lastOff=localStorage.getItem('idhf-last-official');
+  if(lastOff&&officials.includes(lastOff)){
+    // Auto sign back in if they have a profile PIN already set
+    if(profiles[lastOff]&&profiles[lastOff].pin){
+      hpEnterAsRef(lastOff);return;
+    }
+  }
+  document.getElementById('homepage').classList.remove('hidden');
+}
+
+function hpShow(screen){
+  document.querySelectorAll('.home-screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById('hp-'+screen).classList.add('active');
+}
+
+function hpShowRefEntry(){
+  // Build ref list
+  const list=document.getElementById('hp-ref-list');
+  const sorted=[...officials].sort();
+  if(!sorted.length){list.innerHTML='<div style="color:#5a7a9a;font-size:13px;text-align:center;padding:12px;">No refs on the roster yet.</div>';hpShow('ref-entry');return;}
+  list.innerHTML=sorted.map(name=>{
+    const initials=name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+    const p=profiles[name]||{};
+    const sub=p.phone||p.email||'Tap to sign in';
+    return '<div class="ref-list-item" onclick="hpRefPick(\''+encodeURIComponent(name)+'\')">'
+      +'<div class="ref-list-avatar">'+initials+'</div>'
+      +'<div><div class="ref-list-name">'+name+'</div><div class="ref-list-sub">'+sub+'</div></div>'
+      +'</div>';
+  }).join('');
+  hpShow('ref-entry');
+}
+
+function hpRefPick(en){
+  const name=decodeURIComponent(en);_hpSelectedRef=name;
+  const p=profiles[name]||{};
+  if(!p.pin){
+    // No PIN — just sign them in directly and prompt PIN setup
+    hpEnterAsRef(name,true);return;
+  }
+  document.getElementById('hp-ref-pin-name').textContent=name;
+  document.getElementById('hp-ref-pin-input').value='';
+  document.getElementById('hp-ref-pin-error').textContent='';
+  hpShow('ref-pin');
+  setTimeout(()=>document.getElementById('hp-ref-pin-input').focus(),200);
+}
+
+function hpCheckRefPin(){
+  const entered=document.getElementById('hp-ref-pin-input').value.trim();
+  const name=_hpSelectedRef;
+  if(!name)return;
+  const p=profiles[name]||{};
+  if(p.pin&&p.pin===entered){
+    _profileUnlocked=name;
+    hpEnterAsRef(name);
+  } else {
+    document.getElementById('hp-ref-pin-error').textContent='Incorrect PIN — try again.';
+    document.getElementById('hp-ref-pin-input').value='';
+    document.getElementById('hp-ref-pin-input').focus();
+  }
+}
+document.addEventListener('keydown',e=>{
+  const refPinScreen=document.getElementById('hp-ref-pin');
+  if(refPinScreen&&refPinScreen.classList.contains('active')&&e.key==='Enter')hpCheckRefPin();
+  const commScreen=document.getElementById('hp-comm');
+  if(commScreen&&commScreen.classList.contains('active')&&e.key==='Enter')hpCheckCommPin();
+});
+
+function hpShowNewRef(){
+  ['hp-first','hp-last','hp-phone','hp-email','hp-zelle-other-val','hp-new-pin'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  _hpZelleChoice='no';
+  document.querySelectorAll('.zelle-opt').forEach(o=>o.classList.remove('selected'));
+  document.getElementById('zelle-no').classList.add('selected');
+  document.getElementById('hp-zelle-other-field').style.display='none';
+  document.getElementById('hp-new-ref-error').textContent='';
+  hpShow('new-ref');
+  setTimeout(()=>document.getElementById('hp-first').focus(),200);
+}
+
+function hpZelle(choice){
+  _hpZelleChoice=choice;
+  document.querySelectorAll('.zelle-opt').forEach(o=>o.classList.remove('selected'));
+  document.getElementById('zelle-'+choice).classList.add('selected');
+  document.getElementById('hp-zelle-other-field').style.display=choice==='other'?'block':'none';
+}
+
+async function hpCreateRef(){
+  const first=document.getElementById('hp-first').value.trim();
+  const last=document.getElementById('hp-last').value.trim();
+  const phone=document.getElementById('hp-phone').value.trim();
+  const email=document.getElementById('hp-email').value.trim();
+  const pin=document.getElementById('hp-new-pin').value.trim();
+  const zelleOther=document.getElementById('hp-zelle-other-val').value.trim();
+  const errEl=document.getElementById('hp-new-ref-error');
+  if(!first||!last){errEl.textContent='First and last name are required.';return;}
+  if(!/^\d{3}$/.test(pin)){errEl.textContent='PIN must be exactly 3 digits.';return;}
+  const fullName=first+' '+last;
+  // Check duplicate
+  if(officials.find(n=>n.toLowerCase()===fullName.toLowerCase())){
+    errEl.textContent='That name already exists — sign in instead.';return;
+  }
+  // Determine zelle value
+  let zelle='';
+  if(_hpZelleChoice==='phone')zelle=phone;
+  else if(_hpZelleChoice==='other')zelle=zelleOther;
+  // Save profile
+  officials.push(fullName);
+  profiles[fullName]={pin,phone,email,zelle};
+  await saveOfficials();
+  await saveProfiles();
+  buildOfficialDropdown();
+  _profileUnlocked=fullName;
+  hpEnterAsRef(fullName);
+}
+
+function hpEnterAsRef(name,promptPin=false){
+  // Set dropdown
+  const sel=document.getElementById('officialSelect');
+  buildOfficialDropdown();
+  sel.value=name;
+  localStorage.setItem('idhf-last-official',name);
+  // Hide homepage
+  document.getElementById('homepage').classList.add('hidden');
+  // Make sure we're in ref mode
+  if(commMode)lockComm();
+  document.getElementById('ref-bar').style.display='flex';
+  document.getElementById('comm-bar').style.display='none';
+  document.getElementById('refModeBtn').classList.add('active');
+  document.getElementById('commModeBtn').classList.remove('active');
+  updateMineBadge();updateCommPendingAlert();
+  refreshCurrentTab();
+  if(promptPin)setTimeout(()=>openProfileSetup(name),600);
+}
+
+function hpShowComm(){
+  document.getElementById('hp-comm-pin').value='';
+  document.getElementById('hp-comm-error').textContent='';
+  hpShow('comm');
+  setTimeout(()=>document.getElementById('hp-comm-pin').focus(),200);
+}
+
+function hpCheckCommPin(){
+  if(document.getElementById('hp-comm-pin').value.trim()===COMM_PIN){
+    document.getElementById('homepage').classList.add('hidden');
+    // Enter commissioner mode
+    commMode=true;
+    document.getElementById('refModeBtn').classList.remove('active');
+    document.getElementById('commModeBtn').classList.add('active');
+    const sel=document.getElementById('officialSelect');
+    sel.value='';sel.disabled=true;
+    document.getElementById('ref-bar').style.display='none';
+    document.getElementById('comm-bar').style.display='flex';
+    document.querySelectorAll('.comm-only').forEach(el=>el.style.display='');
+    updateMineBadge();updateCommPendingAlert();
+    setTimeout(()=>switchTab('mine'),50);
+  } else {
+    document.getElementById('hp-comm-error').textContent='Incorrect PIN.';
+    document.getElementById('hp-comm-pin').value='';
+    document.getElementById('hp-comm-pin').focus();
+  }
+}
+
+// Also update lockComm to return to homepage
+function lockCommToHome(){
+  lockComm();
+  document.getElementById('homepage').classList.remove('hidden');
+  hpShow('choice');
 }
 
 // ── BOOT ──────────────────────────────────────────────────────────────────
 (function bootRender(){
   buildOfficialDropdown();
-  const lastOff=localStorage.getItem('idhf-last-official');
-  if(lastOff){const sel=document.getElementById('officialSelect');if(sel&&[...sel.options].some(o=>o.value===lastOff)){sel.value=lastOff;if(!(profiles[lastOff]&&profiles[lastOff].pin))setTimeout(()=>openProfileSetup(lastOff),800);}}
   render();updateMineBadge();
+  // Homepage shown after Firebase init so roster is loaded
 })();
 
 document.getElementById('officialSelect').addEventListener('change',()=>{
