@@ -795,28 +795,30 @@ const FB_PATH = 'https://fhldraft67-default-rtdb.firebaseio.com/refpicker';
 function setSyncStatus(msg,color){const el=document.getElementById('sync-status');if(el){el.textContent=msg;el.style.color=color||'#7a9ab0';}}
 async function fbGet(path){const res=await fetch(FB_PATH+'/'+path+'.json');if(!res.ok)throw new Error('GET '+res.status);return res.json();}
 async function fbSet(path,data){const res=await fetch(FB_PATH+'/'+path+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(!res.ok)throw new Error('SET '+res.status);return res.json();}
+async function fbDel(path){const res=await fetch(FB_PATH+'/'+path+'.json',{method:'DELETE'});if(!res.ok)throw new Error('DEL '+res.status);return res.json();}
 
 let _pollInterval=null,_pollSlowInterval=null;
 
 async function pollFast(){
   try{
-    // Check for a commissioner reset first — if detected, wipe and re-render
+    // Check for commissioner reset signal first
     const resetAt=await fbGet('resetAt');
     if(resetAt){
-      const lastSeen=localStorage.getItem('idhf-reset-at');
-      if(!lastSeen||Number(resetAt)>Number(lastSeen)){
+      const lastSeen=Number(localStorage.getItem('idhf-reset-at')||0);
+      if(Number(resetAt)>lastSeen){
+        // Another device reset — wipe everything locally right now
         localStorage.setItem('idhf-reset-at',String(resetAt));
-        // Wipe everything locally
         availability={};approved={};availabilityScorer={};approvedScorer={};
         completedOverrides={};completedScorer={};cancellations={};cancellationsScorer={};needsReplacement={};
         ['idhf-avail','idhf-approved','idhf-avail-sc','idhf-approved-sc',
          'idhf-completed','idhf-completed-sc','idhf-cancels','idhf-cancels-sc','idhf-needs-replace'
-        ].forEach(k=>localStorage.setItem(k,JSON.stringify({})));
+        ].forEach(k=>localStorage.setItem(k,'{}'));
         updateMineBadge();updateCommPendingAlert();refreshCurrentTab();
-        setSyncStatus('✓ Reset applied','#5a9a5a');
-        return; // remaining poll will run on next cycle
+        setSyncStatus('✓ Reset by commissioner','#5a9a5a');
+        return;
       }
     }
+
     // Fetch all critical data in parallel
     const [stateRes,scRes,cancelRes,cancelScRes,nrRes]=await Promise.all([
       fbGet('state'),
@@ -825,31 +827,39 @@ async function pollFast(){
       fbGet('cancellationsScorer'),
       fbGet('needsReplacement')
     ]);
-    if(stateRes){
-      availability=stateRes.availability||{};
-      approved=stateRes.approved||{};
-      localStorage.setItem('idhf-avail',JSON.stringify(availability));
-      localStorage.setItem('idhf-approved',JSON.stringify(approved));
-    }
-    if(scRes){
-      availabilityScorer=scRes.availabilityScorer||{};
-      approvedScorer=scRes.approvedScorer||{};
-      localStorage.setItem('idhf-avail-sc',JSON.stringify(availabilityScorer));
-      localStorage.setItem('idhf-approved-sc',JSON.stringify(approvedScorer));
-    }
+
+    // state — handle null (deleted) as empty
+    availability=(stateRes&&stateRes.availability)||{};
+    approved=(stateRes&&stateRes.approved)||{};
+    localStorage.setItem('idhf-avail',JSON.stringify(availability));
+    localStorage.setItem('idhf-approved',JSON.stringify(approved));
+
+    // stateScorer
+    availabilityScorer=(scRes&&scRes.availabilityScorer)||{};
+    approvedScorer=(scRes&&scRes.approvedScorer)||{};
+    localStorage.setItem('idhf-avail-sc',JSON.stringify(availabilityScorer));
+    localStorage.setItem('idhf-approved-sc',JSON.stringify(approvedScorer));
+
+    // cancellations
     if(cancelRes&&typeof cancelRes==='object'){
       cancellations={};
       Object.keys(cancelRes).forEach(k=>{if(cancelRes[k]&&cancelRes[k].seen===false)cancellations[k]=cancelRes[k];});
       Object.keys(cancellations).forEach(k=>{if(approved[k]===cancellations[k].refName)delete approved[k];});
-      localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));
-    }
+    } else { cancellations={}; }
+    localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));
+
+    // cancellationsScorer
     if(cancelScRes&&typeof cancelScRes==='object'){
       cancellationsScorer={};
       Object.keys(cancelScRes).forEach(k=>{if(cancelScRes[k]&&cancelScRes[k].seen===false)cancellationsScorer[k]=cancelScRes[k];});
       Object.keys(cancellationsScorer).forEach(k=>{if(approvedScorer[k]===cancellationsScorer[k].refName)delete approvedScorer[k];});
-      localStorage.setItem('idhf-cancels-sc',JSON.stringify(cancellationsScorer));
-    }
-    if(nrRes&&typeof nrRes==='object'){needsReplacement=nrRes;localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));}
+    } else { cancellationsScorer={}; }
+    localStorage.setItem('idhf-cancels-sc',JSON.stringify(cancellationsScorer));
+
+    // needsReplacement
+    needsReplacement=(nrRes&&typeof nrRes==='object')?nrRes:{};
+    localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));
+
     refreshCurrentTab();
     updateMineBadge();updateCommPendingAlert();
     setSyncStatus('● Live','#5a9a5a');
@@ -1209,55 +1219,48 @@ function lockComm(){
 }
 function openReset(){document.getElementById('resetModal').classList.add('show');}
 async function confirmReset(){
-  // Clear all state in memory
+  // Wipe in-memory immediately
   availability={};approved={};
   availabilityScorer={};approvedScorer={};
   completedOverrides={};completedScorer={};
   cancellations={};cancellationsScorer={};
   needsReplacement={};
-  // Clear all localStorage
-  localStorage.setItem('idhf-avail',JSON.stringify({}));
-  localStorage.setItem('idhf-approved',JSON.stringify({}));
-  localStorage.setItem('idhf-avail-sc',JSON.stringify({}));
-  localStorage.setItem('idhf-approved-sc',JSON.stringify({}));
-  localStorage.setItem('idhf-completed',JSON.stringify({}));
-  localStorage.setItem('idhf-completed-sc',JSON.stringify({}));
-  localStorage.setItem('idhf-cancels',JSON.stringify({}));
-  localStorage.setItem('idhf-cancels-sc',JSON.stringify({}));
-  localStorage.setItem('idhf-needs-replace',JSON.stringify({}));
-  // Push everything to Firebase in parallel, including a reset timestamp
-  const resetAt=Date.now();
-  try{
-    await Promise.all([
-      fbSet('state',{availability:{},approved:{}}),
-      fbSet('stateScorer',{availabilityScorer:{},approvedScorer:{}}),
-      fbSet('completed',{}),
-      fbSet('completedScorer',{}),
-      fbSet('cancellations',{}),
-      fbSet('cancellationsScorer',{}),
-      fbSet('needsReplacement',{}),
-      fbSet('resetAt',resetAt)  // signal to all devices to wipe and reload
-    ]);
-    localStorage.setItem('idhf-reset-at',String(resetAt));
-    setSyncStatus('✓ Synced','#5a9a5a');setTimeout(()=>setSyncStatus('● Live','#5a9a5a'),2000);
-  }catch(e){setSyncStatus('⚠ Local only','#c8a840');console.warn('Reset Firebase error:',e);}
+  // Wipe localStorage immediately
+  ['idhf-avail','idhf-approved','idhf-avail-sc','idhf-approved-sc',
+   'idhf-completed','idhf-completed-sc','idhf-cancels','idhf-cancels-sc','idhf-needs-replace'
+  ].forEach(k=>localStorage.setItem(k,'{}'));
   closeModal('resetModal');
-  // Clear all badge counts and alerts
-  const bmine=document.getElementById('badge-mine');
-  if(bmine){bmine.textContent='';bmine.style.display='none';bmine.classList.remove('badge-cancel');}
-  const bihl=document.getElementById('badge-ihl');if(bihl)bihl.textContent='0';
-  const bfhl=document.getElementById('badge-fhl');if(bfhl)bfhl.textContent='0';
-  const bdone=document.getElementById('badge-done');if(bdone){bdone.textContent='';bdone.style.display='none';}
-  // Clear comm bar alerts
+  // Clear all UI immediately
+  updateMineBadge();updateCommPendingAlert();refreshCurrentTab();
+  if(commMode)renderPending();
   const pa=document.getElementById('comm-pending-ref-alert');if(pa)pa.style.display='none';
   const pas=document.getElementById('comm-pending-sc-alert');if(pas)pas.style.display='none';
   const ca=document.getElementById('comm-cancel-alert');if(ca)ca.style.display='none';
-  // Refresh everything
-  updateMineBadge();
-  updateCommPendingAlert();
-  refreshCurrentTab();
-  if(commMode)renderPending();
-  showBanner('✓ All games reset — slate is clean');
+  const bmine=document.getElementById('badge-mine');if(bmine){bmine.textContent='';bmine.style.display='none';}
+  const bdone=document.getElementById('badge-done');if(bdone){bdone.textContent='';bdone.style.display='none';}
+  showBanner('✓ Wiping all devices…');
+  // Delete every path from Firebase (null = deleted node)
+  // Then write resetAt so other devices know to wipe on next poll
+  const resetAt=Date.now();
+  localStorage.setItem('idhf-reset-at',String(resetAt));
+  try{
+    await Promise.all([
+      fbDel('state'),
+      fbDel('stateScorer'),
+      fbDel('completed'),
+      fbDel('completedScorer'),
+      fbDel('cancellations'),
+      fbDel('cancellationsScorer'),
+      fbDel('needsReplacement'),
+      fbSet('resetAt',resetAt)
+    ]);
+    setSyncStatus('✓ All clear','#5a9a5a');
+    showBanner('✓ All games reset — slate is clean');
+  }catch(e){
+    setSyncStatus('⚠ Partial','#c8a840');
+    showBanner('⚠ Reset local — Firebase error');
+    console.warn('Reset error:',e);
+  }
 }
 document.getElementById('pinInput').addEventListener('keydown',e=>{if(e.key==='Enter')checkPin();if(e.key==='Escape')closeModal('pinModal');});
 function closeModal(id){document.getElementById(id).classList.remove('show');}
