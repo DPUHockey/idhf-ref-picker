@@ -1140,7 +1140,7 @@ function render(){
         html+='<div class="avail-item"><span class="assigned-star">★</span><span class="avail-name is-assigned">'+appName+'</span>'+(commMode?'<button class="comm-undo-btn" data-key="'+euc(key)+'" onclick="unapproveRef(this)">↺</button>':'')+'</div>';
       }
       // Manual assign — commissioner can put ANY official in this slot, regardless of availability
-      if(commMode&&!_commImpersonating)html+='<button class="comm-pick-btn" style="margin-top:4px;background:#1a2f5a;border-color:#1a2f5a;" onclick="openManualAssign(\''+euc(key)+'\',\'ref\')">'+(isApproved?'✏️ Change Ref':'➕ Assign Ref')+'</button>';
+      if(commMode&&!_commImpersonating)html+='<button class="comm-pick-btn" style="margin-top:4px;background:#1a2f5a;border-color:#1a2f5a;color:#fff;" onclick="openManualAssign(\''+euc(key)+'\',\'ref\')">'+(isApproved?'✏️ Change Ref':'➕ Assign Ref')+'</button>';
       // Ref action button — show when in ref mode OR when commissioner is impersonating
       if(!commMode||_commImpersonating){
         if(isMineRef)html+='<span class="got-it-badge" style="font-size:11px;margin-top:4px;display:inline-block;">🎉 You\'re the Ref!</span>';
@@ -1169,7 +1169,7 @@ function render(){
         html+='<div class="avail-item"><span class="assigned-star" style="color:#1a7a3c;">★</span><span class="avail-name is-assigned">'+appScorer+'</span>'+(commMode?'<button class="comm-undo-btn" data-key="'+euc(key)+'" onclick="unapproveScorer(this)">↺</button>':'')+'</div>';
       }
       // Manual assign — commissioner can put ANY official in this slot, regardless of availability
-      if(commMode&&!_commImpersonating)html+='<button class="comm-pick-btn" style="margin-top:4px;background:#1a4a2a;border-color:#1a4a2a;" onclick="openManualAssign(\''+euc(key)+'\',\'scorer\')">'+(isScorerApproved?'✏️ Change Scorer':'➕ Assign Scorer')+'</button>';
+      if(commMode&&!_commImpersonating)html+='<button class="comm-pick-btn" style="margin-top:4px;background:#1a4a2a;border-color:#1a4a2a;color:#fff;" onclick="openManualAssign(\''+euc(key)+'\',\'scorer\')">'+(isScorerApproved?'✏️ Change Scorer':'➕ Assign Scorer')+'</button>';
       if(!commMode||_commImpersonating){
         if(isMineScorer)html+='<span class="got-it-badge" style="font-size:11px;margin-top:4px;display:inline-block;background:#1a7a3c;">📋 You\'re Scoring!</span>';
         else if(isScorer&&!iAmAvailScorer&&!isScorerApproved)html+='<button class="mark-avail-btn" style="margin-top:4px;font-size:11px;background:#1a5a3a;" data-key="'+euc(key)+'" onclick="markScorerAvail(this)">I\'ll Score</button>';
