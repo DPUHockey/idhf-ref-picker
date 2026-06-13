@@ -811,10 +811,27 @@ function lockComm(){
 }
 function openReset(){document.getElementById('resetModal').classList.add('show');}
 async function confirmReset(){
-  availability={};approved={};completedOverrides={};cancellations={};
-  localStorage.setItem('idhf-avail',JSON.stringify(availability));localStorage.setItem('idhf-approved',JSON.stringify(approved));localStorage.setItem('idhf-completed',JSON.stringify(completedOverrides));localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));
-  await Promise.all([fbSet('state',{availability,approved}),fbSet('completed',completedOverrides),fbSet('cancellations',cancellations)]).catch(e=>console.warn(e));
-  closeModal('resetModal');updateMineBadge();updatePendingBadge();refreshCurrentTab();showBanner('✓ All games reset');
+  availability={};approved={};completedOverrides={};cancellations={};needsReplacement={};
+  localStorage.setItem('idhf-avail',JSON.stringify(availability));
+  localStorage.setItem('idhf-approved',JSON.stringify(approved));
+  localStorage.setItem('idhf-completed',JSON.stringify(completedOverrides));
+  localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));
+  localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));
+  // Clear all badge counts visually
+  const bmine=document.getElementById('badge-mine');
+  if(bmine){bmine.textContent='';bmine.style.display='none';bmine.classList.remove('badge-cancel');}
+  const bihl=document.getElementById('badge-ihl');if(bihl)bihl.textContent='0';
+  const bfhl=document.getElementById('badge-fhl');if(bfhl)bfhl.textContent='0';
+  await Promise.all([
+    fbSet('state',{availability,approved}),
+    fbSet('completed',completedOverrides),
+    fbSet('cancellations',cancellations),
+    fbSet('needsReplacement',needsReplacement)
+  ]).catch(e=>console.warn(e));
+  closeModal('resetModal');
+  updateMineBadge();
+  refreshCurrentTab();
+  showBanner('✓ All games reset');
 }
 document.getElementById('pinInput').addEventListener('keydown',e=>{if(e.key==='Enter')checkPin();if(e.key==='Escape')closeModal('pinModal');});
 function closeModal(id){document.getElementById(id).classList.remove('show');}
@@ -1008,12 +1025,9 @@ function renderMyPay(){
 
 // ── PENDING ───────────────────────────────────────────────────────────────
 function updatePendingBadge(){
-  const ag=allGames();
-  const pc=ag.filter(g=>{const k=gameKey(g.league,g);return(availability[k]||[]).length>0&&!approved[k];}).length;
-  const cc=Object.values(cancellations).filter(c=>c.seen===false).length;
-  const nr=Object.keys(needsReplacement).length;
-  const total=pc+cc+nr;const badge=document.getElementById('badge-pending');badge.textContent=total||'0';
-  if(cc>0||nr>0)badge.classList.add('badge-cancel');else badge.classList.remove('badge-cancel');return total;
+  // badge-pending tab was removed — pending count now lives on badge-mine for commissioner
+  // Just update the mine badge which handles both modes
+  updateMineBadge();
 }
 function renderPending(){
   updatePendingBadge();
