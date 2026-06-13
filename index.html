@@ -366,11 +366,11 @@
 
 <div class="modal-overlay" id="deleteRefModal">
   <div class="modal">
-    <h3 style="color:#c0392b">🗑 Remove Ref?</h3>
-    <p>Remove <strong id="deleteRefName"></strong> from the roster?</p>
+    <h3 style="color:#c0392b">📦 Archive Ref?</h3>
+    <p><strong id="deleteRefName"></strong> will be removed from the active roster and all game lists. Their profile will be saved in the archive and can be restored later with a clean slate.</p>
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeModal('deleteRefModal')">Cancel</button>
-      <button class="btn-primary" style="background:#c0392b" onclick="confirmDeleteRef()">Remove Ref</button>
+      <button class="btn-primary" style="background:#c0392b" onclick="confirmDeleteRef()">Archive Ref</button>
     </div>
   </div>
 </div>
@@ -570,6 +570,8 @@ function startPolling(){
       }
       const nrData=await fbGet('needsReplacement');
       if(nrData){needsReplacement=nrData;localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));}
+      const archData=await fbGet('archived');
+      if(archData){archived=archData;localStorage.setItem('idhf-archived',JSON.stringify(archived));}
       const pData=await fbGet('profiles');
       if(pData){profiles=pData;localStorage.setItem('idhf-profiles',JSON.stringify(profiles));}
       const pyData=await fbGet('payments');
@@ -660,6 +662,7 @@ let cancellations=JSON.parse(localStorage.getItem('idhf-cancels')||'{}');
 Object.keys(cancellations).forEach(k=>{if(cancellations[k].seen!==false)delete cancellations[k];});
 let needsReplacement=JSON.parse(localStorage.getItem('idhf-needs-replace')||'{}');
 let _profileUnlocked=null,_pendingDeleteRef=null,_pendingPayoutRef=null,_pendingCancelKey=null,_editingRefName=null;
+let archived=JSON.parse(localStorage.getItem('idhf-archived')||'{}');
 
 function saveOverrides(){localStorage.setItem('idhf-completed',JSON.stringify(completedOverrides));fbSet('completed',completedOverrides).catch(e=>console.warn(e));}
 async function saveAll(){
@@ -674,6 +677,7 @@ async function saveOfficials(){localStorage.setItem('idhf-officials',JSON.string
 async function saveProfiles(){localStorage.setItem('idhf-profiles',JSON.stringify(profiles));try{await fbSet('profiles',profiles);}catch(e){}}
 async function savePayments(){localStorage.setItem('idhf-payments',JSON.stringify(payments));try{await fbSet('payments',payments);}catch(e){}}
 async function saveCancellations(){localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));try{await fbSet('cancellations',cancellations);}catch(e){}}
+async function saveArchived(){localStorage.setItem('idhf-archived',JSON.stringify(archived));try{await fbSet('archived',archived);}catch(e){}}
 
 function gameKey(league,g){return league+'|'+g.date+'|'+g.time+'|'+g.away+'|'+g.home;}
 function selectedOfficial(){return document.getElementById('officialSelect').value;}
@@ -1309,14 +1313,40 @@ document.getElementById('cancelGameReason').addEventListener('keydown',e=>{if(e.
 
 // ── DELETE REF ────────────────────────────────────────────────────────────
 function openDeleteRef(en){const name=decodeURIComponent(en);_pendingDeleteRef=name;document.getElementById('deleteRefName').textContent=name;document.getElementById('deleteRefModal').classList.add('show');}
-function confirmDeleteRef(){
+async function confirmDeleteRef(){
   const name=_pendingDeleteRef;if(!name)return;
-  officials=officials.filter(n=>n!==name);saveOfficials();
-  Object.keys(availability).forEach(key=>{if(availability[key]){availability[key]=availability[key].filter(n=>n!==name);if(!availability[key].length)delete availability[key];}});
-  saveAll();buildOfficialDropdown();
-  const sel=document.getElementById('officialSelect');if(sel.value===name){sel.value='';localStorage.removeItem('idhf-last-official');}
+  // Save to archive with timestamp (keep their old profile info for reference)
+  archived[name]={archivedAt:Date.now(),profile:profiles[name]||{}};
+  saveArchived();
+  // Remove from active roster
+  officials=officials.filter(n=>n!==name);
+  saveOfficials();
+  // Scrub from all availability lists
+  Object.keys(availability).forEach(key=>{
+    if(availability[key]){
+      availability[key]=availability[key].filter(n=>n!==name);
+      if(!availability[key].length)delete availability[key];
+    }
+  });
+  // Scrub from approved assignments
+  Object.keys(approved).forEach(key=>{if(approved[key]===name)delete approved[key];});
+  // Scrub from cancellations
+  Object.keys(cancellations).forEach(key=>{if(cancellations[key]&&cancellations[key].refName===name)delete cancellations[key];});
+  // Scrub from needsReplacement (game was their assignment)
+  // Leave needsReplacement as-is so game still shows as needing a ref
+  // Clear profile and payments from active store
+  delete profiles[name];
+  delete payments[name];
+  saveProfiles();savePayments();saveCancellations();
+  await saveAll();
+  buildOfficialDropdown();
+  const sel=document.getElementById('officialSelect');
+  if(sel.value===name){sel.value='';localStorage.removeItem('idhf-last-official');}
   if(_profileUnlocked===name)_profileUnlocked=null;
-  closeModal('deleteRefModal');showBanner(name+' removed');renderPayroll();_pendingDeleteRef=null;
+  closeModal('deleteRefModal');
+  showBanner(name+' archived');
+  renderCommRoster();
+  _pendingDeleteRef=null;
 }
 
 // ── COPY ──────────────────────────────────────────────────────────────────
@@ -1529,10 +1559,45 @@ function renderCommRoster(){
     html+='</div></div></div>';
     html+='<div class="ref-card-stats"><div class="ref-card-stat"><div class="rcs-num">'+myGames.length+'</div><div class="rcs-lbl">Assigned</div></div><div class="ref-card-stat"><div class="rcs-num">'+completed.length+'</div><div class="rcs-lbl">Done</div></div><div class="ref-card-stat"><div class="rcs-num">'+upcoming.length+'</div><div class="rcs-lbl">Upcoming</div></div></div>';
     html+='<div class="ref-card-pay"><div class="ref-card-pay-col"><div class="rcp-num pay-due">$'+earned+'</div><div class="rcp-lbl">Earned</div></div><div class="ref-card-pay-divider"></div><div class="ref-card-pay-col"><div class="rcp-num" style="color:#1a7a3c;">$'+paid+'</div><div class="rcp-lbl">Paid</div></div><div class="ref-card-pay-divider"></div><div class="ref-card-pay-col"><div class="rcp-num" style="color:'+balColor+';">'+balTxt+'</div><div class="rcp-lbl">Balance</div></div></div>';
-    html+='<div class="ref-card-actions"><button class="pay-out-btn" onclick="openPayout(\''+sn+'\')">💵 Pay Out</button><button class="pay-out-btn" style="background:var(--maroon);" onclick="commEditProfile(\''+sn+'\')">✏️ Edit</button><button class="pay-out-btn" style="background:#1a5a3a;" onclick="commEnterAsRef(\''+sn+'\')">👤 Enter as Ref</button><button class="delete-ref-btn" onclick="openDeleteRef(\''+sn+'\')">🗑 Remove</button></div>';
+    html+='<div class="ref-card-actions"><button class="pay-out-btn" onclick="openPayout(\''+sn+'\')">💵 Pay Out</button><button class="pay-out-btn" style="background:var(--maroon);" onclick="commEditProfile(\''+sn+'\')">✏️ Edit</button><button class="pay-out-btn" style="background:#1a5a3a;" onclick="commEnterAsRef(\''+sn+'\')">👤 Enter as Ref</button><button class="delete-ref-btn" onclick="openDeleteRef(\''+sn+'\')">📦 Archive</button></div>';
     html+='</div>';
   });
+
+  // ── ARCHIVED SECTION ──────────────────────────────────────────────────────
+  const archivedNames=Object.keys(archived).sort();
+  if(archivedNames.length){
+    html+='<div style="background:#2a1a10;color:#c8a840;padding:10px 14px;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;margin-top:4px;">📦 Archived Officials — '+archivedNames.length+'</div>';
+    archivedNames.forEach(name=>{
+      const a=archived[name];
+      const dt=a.archivedAt?new Date(a.archivedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
+      const initials=name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+      const sn=encodeURIComponent(name);
+      html+='<div class="ref-card" style="opacity:0.7;background:#fafafa;">';
+      html+='<div class="ref-card-header"><div class="ref-card-avatar" style="background:#888;color:#fff;">'+initials+'</div>';
+      html+='<div style="flex:1;min-width:0;"><div class="ref-card-name" style="color:#666;">'+name+'</div>';
+      html+='<div style="font-size:11px;color:#999;margin-top:2px;">Archived '+(dt||'')+'</div></div></div>';
+      html+='<div class="ref-card-actions"><button class="pay-out-btn" style="background:#3a5a3a;" onclick="restoreRef(\''+sn+'\')">↩ Restore to Active</button></div>';
+      html+='</div>';
+    });
+  }
+
   roster.innerHTML=html;
+}
+
+async function restoreRef(en){
+  const name=decodeURIComponent(en);
+  // Add back to officials list with clean profile (no PIN, no contact info, no payments)
+  if(!officials.includes(name))officials.push(name);
+  delete archived[name];
+  delete profiles[name]; // fresh profile
+  delete payments[name]; // fresh payment history
+  saveOfficials();
+  saveArchived();
+  saveProfiles();
+  savePayments();
+  buildOfficialDropdown();
+  showBanner(name+' restored to active roster');
+  renderCommRoster();
 }
 
 // ── FIREBASE INIT ─────────────────────────────────────────────────────────
@@ -1553,6 +1618,7 @@ async function initFirebase(){
       localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));
     }
     const nrData=await fbGet('needsReplacement');if(nrData){needsReplacement=nrData;localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));}
+    const archData=await fbGet('archived');if(archData){archived=archData;localStorage.setItem('idhf-archived',JSON.stringify(archived));}
     const data=await fbGet('state');
     if(data){availability=data.availability||{};approved=data.approved||{};localStorage.setItem('idhf-avail',JSON.stringify(availability));localStorage.setItem('idhf-approved',JSON.stringify(approved));refreshCurrentTab();updateMineBadge();updateCommPendingAlert();}
     else await fbSet('state',{availability,approved});
