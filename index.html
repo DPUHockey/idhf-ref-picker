@@ -423,11 +423,10 @@
   <div class="league-tabs" id="mainTabs">
     <button class="tab active" id="tab-ihl" onclick="switchTab('ihl')">IHL <span class="badge" id="badge-ihl">0</span></button>
     <button class="tab" id="tab-fhl" onclick="switchTab('fhl')">FHL <span class="badge" id="badge-fhl">0</span></button>
-    <button class="tab" id="tab-mine" onclick="switchTab('mine')">⭐ Mine <span class="badge" id="badge-mine">0</span></button>
+    <button class="tab" id="tab-mine" onclick="switchTab('mine')">⛳ Pending <span class="badge" id="badge-mine" style="display:none;"></span></button>
     <button class="tab" id="tab-mypay" onclick="switchTab('mypay')">💵 My Pay</button>
     <button class="tab" id="tab-profile" onclick="switchTab('profile')">👤 Profile</button>
     <button class="tab" id="tab-cal" onclick="switchTab('cal')">📅 Cal</button>
-    <button class="tab comm-only" id="tab-pending" onclick="switchTab('pending')" style="display:none;">⛳ Pending <span class="badge" id="badge-pending">0</span></button>
     <button class="tab comm-only" id="tab-pay" onclick="switchTab('pay')" style="display:none;">💰 Payroll</button>
   </div>
 
@@ -444,9 +443,9 @@
     <div class="pay-summary" id="pay-summary"></div>
   </div>
 
-  <!-- MY GAMES -->
+  <!-- PENDING / MY GAMES -->
   <div class="panel" id="mine-panel" style="display:none;">
-    <div class="panel-header"><span id="mine-title">My Assigned Games</span></div>
+    <div class="panel-header"><span id="mine-title">Pending</span></div>
     <div id="mine-list"></div>
   </div>
 
@@ -747,11 +746,11 @@ function checkPin(){
     sel.disabled=true;
     document.getElementById('commBtn').classList.add('active');
     document.getElementById('commBar').classList.add('show');
-    // Show comm-only tabs FIRST before switching to one
+    // Show comm-only tabs FIRST
     document.querySelectorAll('.comm-only').forEach(el=>el.style.display='');
-    updatePendingBadge();
-    // Now switch to Pending tab
-    setTimeout(()=>switchTab('pending'),50);
+    updateMineBadge();
+    // Land on Pending tab (mine tab)
+    setTimeout(()=>switchTab('mine'),50);
   }else{document.getElementById('pinError').textContent='Incorrect PIN.';document.getElementById('pinInput').value='';document.getElementById('pinInput').focus();}
 }
 function lockComm(){
@@ -821,11 +820,49 @@ function switchTab(tab){
 }
 
 function renderMyGames(){
+  // COMMISSIONER MODE — show cancellations pending acknowledgement
+  if(commMode){
+    const ag=allGames();
+    const cancelList=Object.keys(cancellations).map(key=>{
+      const c=cancellations[key],g=ag.find(g=>gameKey(g.league,g)===key);
+      return{key,c,g};
+    }).filter(x=>x.g&&x.c.seen===false).sort((a,b)=>(b.c.timestamp||0)-(a.c.timestamp||0));
+    document.getElementById('badge-mine').textContent=cancelList.length||'';
+    document.getElementById('mine-title').textContent='Pending Cancellations';
+    if(!cancelList.length){
+      document.getElementById('mine-list').innerHTML='<div class="no-games-msg">No pending cancellations.<br><span style="font-size:12px">Cancelled games will appear here.</span></div>';
+      return;
+    }
+    let html='<div class="cancellation-section-header" style="background:#c0392b;">⚠ '+cancelList.length+' Cancellation'+(cancelList.length>1?'s':'')+' — Action Required</div>';
+    cancelList.forEach(({key,c,g})=>{
+      const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
+      const ts=c.timestamp?new Date(c.timestamp).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
+      const sk=encodeURIComponent(key);
+      html+='<div class="cancellation-row">';
+      html+='<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;">';
+      html+='<span style="font-weight:700;color:#c0392b;">✖ '+c.refName+' cancelled</span>';
+      html+='<span style="font-size:10px;color:var(--muted);">'+ts+'</span>';
+      html+='</div>';
+      html+='<div style="font-size:14px;font-weight:600;color:var(--dark);margin-top:4px;">'+g.away+' vs '+g.home+'</div>';
+      html+='<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+ds+' · '+g.time+' · '+g.league.toUpperCase()+' · Inwood Ice Arena</div>';
+      if(c.reason)html+='<div style="font-size:12px;color:#7a4040;margin-top:4px;font-style:italic;">Reason: '+c.reason+'</div>';
+      html+='<div style="margin-top:10px;"><button class="comm-pick-btn" style="font-size:12px;padding:7px 14px;" data-dismiss-key="'+sk+'">✓ Acknowledged — Find Replacement</button></div>';
+      html+='</div>';
+    });
+    document.getElementById('mine-list').innerHTML=html;
+    document.getElementById('mine-list').addEventListener('click',function(e){
+      const btn=e.target.closest('[data-dismiss-key]');
+      if(btn)dismissCancellation(btn.dataset.dismissKey);
+    },{once:true});
+    return;
+  }
+
+  // REF MODE — show their assigned games
   const official=selectedOfficial(),ag=allGames();
   const myGames=ag.filter(g=>approved[gameKey(g.league,g)]===official).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:a.time<b.time?-1:1);
-  document.getElementById('badge-mine').textContent=myGames.length;
+  document.getElementById('badge-mine').textContent=myGames.length||'';
   const ts=todayStr();
-  if(!official){document.getElementById('mine-list').innerHTML='<div class="no-games-msg">Select your name to see your assigned games.</div>';document.getElementById('mine-title').textContent='My Assigned Games';return;}
+  if(!official){document.getElementById('mine-list').innerHTML='<div class="no-games-msg">Select your name to see your assigned games.</div>';document.getElementById('mine-title').textContent='Pending';return;}
   document.getElementById('mine-title').textContent=official+"'s Games";
   if(!myGames.length){document.getElementById('mine-list').innerHTML='<div class="no-games-msg">No assigned games yet.<br><span style="font-size:12px">Mark availability on the IHL and FHL tabs.</span></div>';return;}
   let html='';
@@ -837,12 +874,11 @@ function renderMyGames(){
     if(isToday)html+='<span class="today-badge">TODAY</span>';
     html+='<span class="my-game-date">'+ds+'</span><span style="color:var(--muted);font-size:11px;">·</span><span class="my-game-time">'+g.time+'</span><span class="my-game-league'+(g.league==='fhl'?' fhl':'')+'">'+ll+'</span></div>';
     html+='<div class="my-game-matchup">'+g.away+' vs '+g.home+'</div>';
-    // Check if this game has a pending cancellation by this ref
     const hasCancelled=cancellations[key]&&cancellations[key].refName===official&&cancellations[key].seen===false;
     html+='<div class="my-game-row-bot"><span class="my-game-arena">Inwood Ice Arena</span>';
     if(hasCancelled){
       html+='<span style="font-size:11px;font-weight:700;color:#e08800;background:#fff8e6;border:1px solid #f0d080;border-radius:4px;padding:4px 8px;white-space:nowrap;">⏳ Cancellation pending</span>';
-    } else if(!isPastGame){
+    }else if(!isPastGame){
       html+='<button class="cancel-game-btn" data-cancel-key="'+sk+'">✖ Cancel</button>';
     }
     html+='</div></div>';
@@ -852,8 +888,20 @@ function renderMyGames(){
 }
 
 function updateMineBadge(){
-  const official=selectedOfficial();if(!official){document.getElementById('badge-mine').textContent='0';return;}
-  document.getElementById('badge-mine').textContent=allGames().filter(g=>approved[gameKey(g.league,g)]===official).length;
+  const badge=document.getElementById('badge-mine');
+  if(commMode){
+    const count=Object.values(cancellations).filter(c=>c.seen===false).length;
+    badge.textContent=count;
+    badge.style.display=count>0?'':'none';
+    if(count>0)badge.classList.add('badge-cancel');else badge.classList.remove('badge-cancel');
+    return;
+  }
+  const official=selectedOfficial();
+  if(!official){badge.textContent='';badge.style.display='none';return;}
+  const count=allGames().filter(g=>approved[gameKey(g.league,g)]===official).length;
+  badge.textContent=count;
+  badge.style.display=count>0?'':'none';
+  badge.classList.remove('badge-cancel');
 }
 
 // ── MY PAY (ref-facing) ───────────────────────────────────────────────────
@@ -981,17 +1029,17 @@ function renderPending(){
 function dismissCancellation(ek){
   const key=decodeURIComponent(ek);
   if(cancellations[key]){
-    // Mark as needing replacement instead of just seen=true
     needsReplacement[key]=true;
     delete cancellations[key];
     localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));
     saveCancellations();
     fbSet('needsReplacement',needsReplacement).catch(e=>{});
   }
-  updatePendingBadge();renderPending();
-  // Also refresh schedule tabs so orange highlight appears
+  updatePendingBadge();updateMineBadge();
+  // Refresh whichever tab is showing
   const at=document.querySelector('.tab.active');
-  if(at&&(at.id==='tab-ihl'||at.id==='tab-fhl'))render();
+  if(at&&at.id==='tab-mine')renderMyGames();
+  else if(at&&(at.id==='tab-ihl'||at.id==='tab-fhl'))render();
 }
 
 // ── PAYROLL ───────────────────────────────────────────────────────────────
