@@ -479,6 +479,19 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="manualAssignModal">
+  <div class="modal">
+    <h3 id="manualAssignTitle">🏒 Assign Referee</h3>
+    <p id="manualAssignDesc" style="font-weight:600;color:var(--dark);margin-bottom:12px;"></p>
+    <select class="text-input" id="manualAssignSelect" style="font-size:15px;cursor:pointer;"></select>
+    <div class="pin-error" id="manualAssignError"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('manualAssignModal')">Cancel</button>
+      <button class="btn-primary" onclick="confirmManualAssign()">Assign</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="deleteRefModal">
   <div class="modal">
     <h3 style="color:#c0392b">📦 Archive Ref?</h3>
@@ -1126,6 +1139,8 @@ function render(){
       } else if(isApproved){
         html+='<div class="avail-item"><span class="assigned-star">★</span><span class="avail-name is-assigned">'+appName+'</span>'+(commMode?'<button class="comm-undo-btn" data-key="'+euc(key)+'" onclick="unapproveRef(this)">↺</button>':'')+'</div>';
       }
+      // Manual assign — commissioner can put ANY official in this slot, regardless of availability
+      if(commMode&&!_commImpersonating)html+='<button class="comm-pick-btn" style="margin-top:4px;background:#1a2f5a;border-color:#1a2f5a;" onclick="openManualAssign(\''+euc(key)+'\',\'ref\')">'+(isApproved?'✏️ Change Ref':'➕ Assign Ref')+'</button>';
       // Ref action button — show when in ref mode OR when commissioner is impersonating
       if(!commMode||_commImpersonating){
         if(isMineRef)html+='<span class="got-it-badge" style="font-size:11px;margin-top:4px;display:inline-block;">🎉 You\'re the Ref!</span>';
@@ -1153,6 +1168,8 @@ function render(){
       } else if(isScorerApproved){
         html+='<div class="avail-item"><span class="assigned-star" style="color:#1a7a3c;">★</span><span class="avail-name is-assigned">'+appScorer+'</span>'+(commMode?'<button class="comm-undo-btn" data-key="'+euc(key)+'" onclick="unapproveScorer(this)">↺</button>':'')+'</div>';
       }
+      // Manual assign — commissioner can put ANY official in this slot, regardless of availability
+      if(commMode&&!_commImpersonating)html+='<button class="comm-pick-btn" style="margin-top:4px;background:#1a4a2a;border-color:#1a4a2a;" onclick="openManualAssign(\''+euc(key)+'\',\'scorer\')">'+(isScorerApproved?'✏️ Change Scorer':'➕ Assign Scorer')+'</button>';
       if(!commMode||_commImpersonating){
         if(isMineScorer)html+='<span class="got-it-badge" style="font-size:11px;margin-top:4px;display:inline-block;background:#1a7a3c;">📋 You\'re Scoring!</span>';
         else if(isScorer&&!iAmAvailScorer&&!isScorerApproved)html+='<button class="mark-avail-btn" style="margin-top:4px;font-size:11px;background:#1a5a3a;" data-key="'+euc(key)+'" onclick="markScorerAvail(this)">I\'ll Score</button>';
@@ -1206,6 +1223,47 @@ function approveRefNR(el){
   saveAll();updateCommPendingAlert();setTimeout(()=>refreshCurrentTab(),100);showBanner(name+' assigned');
 }
 function unapproveRef(el){const key=decodeURIComponent(el.dataset.key);delete approved[key];saveAll();refreshCurrentTab();showBanner('Assignment undone');}
+
+// ── MANUAL ASSIGN (commissioner picks anyone, regardless of availability) ──
+let _manualAssignKey=null,_manualAssignRole=null;
+function openManualAssign(ek,role){
+  const key=decodeURIComponent(ek);_manualAssignKey=key;_manualAssignRole=role;
+  const g=allGames().find(g=>gameKey(g.league,g)===key);
+  const title=document.getElementById('manualAssignTitle');
+  const desc=document.getElementById('manualAssignDesc');
+  const sel=document.getElementById('manualAssignSelect');
+  const isRef=role==='ref';
+  title.textContent=isRef?'🏒 Assign Referee':'📋 Assign Scorekeeper';
+  if(g){
+    const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
+    desc.textContent=g.away+' vs '+g.home+' · '+ds+' '+g.time+' ('+g.league.toUpperCase()+')';
+  } else {
+    const parts=key.split('|');
+    desc.textContent=(parts[3]||'')+' vs '+(parts[4]||'')+' · '+(parts[1]||'')+' '+(parts[2]||'');
+  }
+  const current=isRef?approved[key]:approvedScorer[key];
+  sel.innerHTML='<option value="">— None —</option>';
+  [...officials].sort().forEach(name=>{
+    const o=document.createElement('option');o.value=name;o.textContent=name;
+    if(name===current)o.selected=true;
+    sel.appendChild(o);
+  });
+  document.getElementById('manualAssignError').textContent='';
+  document.getElementById('manualAssignModal').classList.add('show');
+}
+function confirmManualAssign(){
+  const key=_manualAssignKey,role=_manualAssignRole;if(!key)return;
+  const name=document.getElementById('manualAssignSelect').value;
+  if(role==='ref'){
+    if(name)approved[key]=name;else delete approved[key];
+    if(needsReplacement[key]){delete needsReplacement[key];localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));fbSet('needsReplacement',needsReplacement).catch(e=>{});}
+  } else {
+    if(name)approvedScorer[key]=name;else delete approvedScorer[key];
+  }
+  closeModal('manualAssignModal');
+  saveAll();updateCommPendingAlert();refreshCurrentTab();
+  showBanner(name?name+' assigned':'Assignment cleared');
+}
 
 function switchToRefMode(){
   // Already in ref mode — nothing to do
