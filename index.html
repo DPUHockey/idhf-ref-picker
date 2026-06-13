@@ -33,11 +33,17 @@
   window.addEventListener('load',()=>setTimeout(checkForUpdate,3000));
   // Check every time user returns to the app (tab focus / iOS resume)
   document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='visible')setTimeout(checkForUpdate,500);
+    if(document.visibilityState==='visible'){
+      setTimeout(checkForUpdate,500);
+      if(typeof checkDueNotifications==='function')setTimeout(checkDueNotifications,800);
+    }
   });
   window.addEventListener('pageshow',e=>{
     // iOS fires pageshow with persisted=true when returning from background
-    if(e.persisted)setTimeout(checkForUpdate,500);
+    if(e.persisted){
+      setTimeout(checkForUpdate,500);
+      if(typeof checkDueNotifications==='function')setTimeout(checkDueNotifications,800);
+    }
   });
 })();
 </script>
@@ -760,6 +766,19 @@
         <h4>My Games</h4>
         <div id="profile-game-list"></div>
       </div>
+      <div class="profile-section" style="padding:0;">
+        <div id="notify-bar" style="padding:12px 16px;background:#f8edf0;display:none;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+            <span style="font-size:12px;font-weight:700;color:var(--maroon);">🔔 Game Day Reminders</span>
+            <span id="notify-status-dot" style="font-size:11px;font-weight:700;"></span>
+          </div>
+          <div id="notify-msg" style="font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.5;"></div>
+          <div style="display:flex;gap:8px;">
+            <button class="mark-avail-btn" id="notifyBtn" onclick="requestNotifications()" style="flex:1;margin-top:0;"></button>
+            <button id="notifyOffBtn" onclick="disableNotifications()" style="display:none;flex-shrink:0;font-size:12px;font-weight:700;color:#c0392b;background:#ffeaea;border:1px solid #f0b0b0;border-radius:6px;padding:8px 12px;cursor:pointer;">Turn Off</button>
+          </div>
+        </div>
+      </div>
       <div class="profile-section" style="padding:12px 16px;">
         <button onclick="lockProfile()" style="width:100%;padding:10px;background:transparent;border:1px solid var(--border);border-radius:6px;color:var(--muted);font-size:13px;cursor:pointer;margin-bottom:8px;">🔒 Lock Profile</button>
         <button onclick="signOutRef()" style="width:100%;padding:10px;background:transparent;border:1px solid #c0392b;border-radius:6px;color:#c0392b;font-size:13px;cursor:pointer;">↩ Sign Out</button>
@@ -1346,6 +1365,28 @@ function renderMyGames(){
   if(!official){document.getElementById('mine-list').innerHTML='<div class="no-games-msg">Select your name to see your assigned games.</div>';document.getElementById('mine-title').textContent='My Games';return;}
   document.getElementById('mine-title').textContent=official+"'s Games";
   if(!myGames.length){document.getElementById('mine-list').innerHTML='<div class="no-games-msg">No assigned games yet.<br><span style="font-size:12px">Mark availability on the IHL and FHL tabs.</span></div>';return;}
+
+  // ── STALE CANCELLATION CLEANUP ──
+  // If a ref currently HOLDS an assignment (approved/approvedScorer===official) but
+  // there's a leftover cancellation record for them on that same game with seen:false,
+  // that record is stale (e.g. commissioner re-assigned them after a cancellation
+  // without it being acknowledged) and is blocking the Cancel button. Clear it.
+  let staleCleared=false;
+  myGames.forEach(g=>{
+    const key=gameKey(g.league,g);
+    if(g.myRole==='ref'&&approved[key]===official&&cancellations[key]&&cancellations[key].refName===official&&cancellations[key].seen===false){
+      delete cancellations[key];staleCleared=true;
+    }
+    if(g.myRole==='scorer'&&approvedScorer[key]===official&&cancellationsScorer[key]&&cancellationsScorer[key].refName===official&&cancellationsScorer[key].seen===false){
+      delete cancellationsScorer[key];staleCleared=true;
+    }
+  });
+  if(staleCleared){
+    localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));
+    localStorage.setItem('idhf-cancels-sc',JSON.stringify(cancellationsScorer));
+    saveCancellations();saveCancellationsScorer();
+  }
+
   let html='';
   myGames.forEach(g=>{
     const isRef=g.myRole==='ref',isToday=g.date===ts,isPastGame=isPast(g.date),ll=g.league.toUpperCase();
@@ -1924,9 +1965,15 @@ function resetOnePayment(){
 // ── CANCEL GAME ───────────────────────────────────────────────────────────
 function openCancelGame(ek){
   const key=decodeURIComponent(ek);_pendingCancelKey=key;
-  const g=allGames().find(g=>gameKey(g.league,g)===key);if(!g)return;
-  const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
-  document.getElementById('cancelGameDesc').textContent=g.away+' vs '+g.home+' · '+ds+' '+g.time+' ('+g.league.toUpperCase()+')';
+  const g=allGames().find(g=>gameKey(g.league,g)===key);
+  if(g){
+    const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
+    document.getElementById('cancelGameDesc').textContent=g.away+' vs '+g.home+' · '+ds+' '+g.time+' ('+g.league.toUpperCase()+')';
+  } else {
+    // Fallback: parse details from the key itself so the modal still opens
+    const parts=key.split('|');
+    document.getElementById('cancelGameDesc').textContent=(parts[3]||'')+' vs '+(parts[4]||'')+' · '+(parts[1]||'')+' '+(parts[2]||'');
+  }
   document.getElementById('cancelGameReason').value='';document.getElementById('cancelGameError').textContent='';
   document.getElementById('cancelGameModal').classList.add('show');setTimeout(()=>document.getElementById('cancelGameReason').focus(),100);
 }
@@ -1959,9 +2006,14 @@ document.getElementById('cancelGameReason').addEventListener('keydown',e=>{if(e.
 let _pendingCancelScorerKey=null;
 function openCancelScorerGame(ek){
   const key=decodeURIComponent(ek);_pendingCancelScorerKey=key;
-  const g=allGames().find(g=>gameKey(g.league,g)===key);if(!g)return;
-  const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
-  document.getElementById('cancelScorerDesc').textContent=g.away+' vs '+g.home+' · '+ds+' '+g.time+' ('+g.league.toUpperCase()+')';
+  const g=allGames().find(g=>gameKey(g.league,g)===key);
+  if(g){
+    const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
+    document.getElementById('cancelScorerDesc').textContent=g.away+' vs '+g.home+' · '+ds+' '+g.time+' ('+g.league.toUpperCase()+')';
+  } else {
+    const parts=key.split('|');
+    document.getElementById('cancelScorerDesc').textContent=(parts[3]||'')+' vs '+(parts[4]||'')+' · '+(parts[1]||'')+' '+(parts[2]||'');
+  }
   document.getElementById('cancelScorerReason').value='';document.getElementById('cancelScorerError').textContent='';
   document.getElementById('cancelScorerModal').classList.add('show');setTimeout(()=>document.getElementById('cancelScorerReason').focus(),100);
 }
@@ -2121,6 +2173,7 @@ function showProfileContent(name){
   if(!myGames.length){gl='<div style="font-size:13px;color:var(--muted);padding:8px 0;">No assigned games yet.</div>';}
   else{myGames.sort((a,b)=>a.date<b.date?-1:1).forEach(g=>{const done=isGameComplete(g),isToday=g.date===ts,[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d,dotColor=g.league==='ihl'?'var(--maroon)':'#4a1020';gl+='<div class="profile-game-item"><div class="profile-league-dot" style="background:'+dotColor+'"></div><span style="color:var(--muted);min-width:90px;">'+ds+'</span><span style="font-weight:600;">'+g.time+'</span><span style="margin-left:6px;font-size:10px;background:'+(done?'#e6f4ec':'#f0e4e6')+';color:'+(done?'#1a7a3c':'var(--maroon)')+';padding:1px 5px;border-radius:3px;">'+(isToday?'TODAY':done?'Done':'Upcoming')+'</span></div>';});}
   document.getElementById('profile-game-list').innerHTML=gl;
+  updateNotifyBtn();
 }
 
 function lockProfile(){_profileUnlocked=null;renderProfileTab();if(document.querySelector('.tab.active').id==='tab-mypay')renderMyPay();}
@@ -2601,10 +2654,144 @@ function lockCommToHome(){
   hpShow('choice');
 }
 
+// ── GAME DAY REMINDERS ──────────────────────────────────────────────────────
+// Uses the browser Notification API. Two mechanisms:
+//  1) scheduleMyNotifications() — while the app is OPEN, schedules an in-tab
+//     setTimeout for each upcoming game day at 8 AM (works for the next ~20 days,
+//     setTimeout has a ~24.8 day max safe delay).
+//  2) checkDueNotifications() — runs on every app open/resume. If it's a game day
+//     and it's already past 8 AM and the ref hasn't been notified yet today, fires
+//     immediately. This is the reliable path for PWAs that aren't kept open.
+function getNotifPref(){return localStorage.getItem('idhf-notif')!=='off';}
+function setNotifPref(on){localStorage.setItem('idhf-notif',on?'on':'off');}
+
+function updateNotifyBtn(){
+  const bar=document.getElementById('notify-bar');
+  const btn=document.getElementById('notifyBtn');
+  const offBtn=document.getElementById('notifyOffBtn');
+  const msg=document.getElementById('notify-msg');
+  const dot=document.getElementById('notify-status-dot');
+  if(!bar||!btn)return;
+  if(!('Notification' in window)){bar.style.display='none';return;}
+  bar.style.display='';
+  const pref=getNotifPref();
+  if(Notification.permission==='denied'){
+    btn.textContent='Notifications Blocked by Browser';
+    btn.style.background='#999';btn.disabled=true;
+    offBtn.style.display='none';
+    msg.textContent='Notifications are blocked. Enable them in your browser/device settings to get game day reminders.';
+    dot.textContent='';
+  } else if(Notification.permission==='granted'&&pref){
+    btn.textContent='🔔 Reschedule Reminders';
+    btn.style.background='var(--maroon)';btn.disabled=false;
+    offBtn.style.display='';
+    msg.textContent='You\'ll get a reminder on each of your game days (after 8 AM).';
+    dot.textContent='● On';dot.style.color='#1a7a3c';
+  } else {
+    btn.textContent='🔔 Enable Game Day Reminders';
+    btn.style.background='var(--blue)';btn.disabled=false;
+    offBtn.style.display='none';
+    msg.textContent='Get a reminder on each day you\'re assigned to ref or score.';
+    dot.textContent='○ Off';dot.style.color='var(--muted)';
+  }
+}
+
+function requestNotifications(){
+  if(!('Notification' in window)){showBanner('Notifications not supported on this device');return;}
+  if(Notification.permission==='granted'){
+    setNotifPref(true);
+    scheduleMyNotifications();
+    updateNotifyBtn();
+    return;
+  }
+  Notification.requestPermission().then(perm=>{
+    if(perm==='granted'){
+      setNotifPref(true);
+      scheduleMyNotifications();
+    }
+    updateNotifyBtn();
+  });
+}
+
+function disableNotifications(){
+  setNotifPref(false);
+  updateNotifyBtn();
+  showBanner('Game day reminders turned off');
+}
+
+function myGamesForNotify(official){
+  const ag=allGames();
+  return ag.filter(g=>{
+    const k=gameKey(g.league,g);
+    return (approved[k]===official||approvedScorer[k]===official)&&!isPast(g.date);
+  }).map(g=>{
+    const k=gameKey(g.league,g);
+    return Object.assign({},g,{role:approved[k]===official?'ref':'scorer'});
+  });
+}
+
+function scheduleMyNotifications(){
+  const official=selectedOfficial();
+  if(!official)return;
+  if(!getNotifPref()){showBanner('Reminders are off');return;}
+  const myGames=myGamesForNotify(official);
+  const msg=document.getElementById('notify-msg');
+  if(!myGames.length){
+    if(msg)msg.textContent='No upcoming games to remind you about.';
+    return;
+  }
+  let scheduled=0;
+  const now=Date.now();
+  const MAX_DELAY=20*24*60*60*1000; // ~20 days, safely under setTimeout's int32 limit
+  myGames.forEach(g=>{
+    const[y,m,d]=g.date.split('-').map(Number);
+    const remindAt=new Date(y,m-1,d,8,0,0).getTime();
+    const msUntil=remindAt-now;
+    if(msUntil>0&&msUntil<MAX_DELAY){
+      setTimeout(()=>{
+        if(!getNotifPref())return;
+        const roleTag=g.role==='ref'?'🏒 Ref':'📋 Scorer';
+        new Notification('🏒 Game Day — IDHF',{
+          body:roleTag+' · '+g.time+' · '+g.away+' vs '+g.home+' · Inwood Ice Arena ('+g.league.toUpperCase()+')',
+          tag:'idhf-'+gameKey(g.league,g)
+        });
+        localStorage.setItem('idhf-notif-fired-'+official+'-'+g.date,'1');
+      },msUntil);
+      scheduled++;
+    }
+  });
+  if(msg)msg.textContent=scheduled>0
+    ?'✓ '+scheduled+' reminder'+(scheduled>1?'s':'')+' scheduled — keep the app open or check back on game day.'
+    :'You\'ll get a reminder on each of your game days (after 8 AM).';
+}
+
+// Fires immediately if it's already a game day, past 8 AM, and not yet notified today.
+// Catches the case where the PWA wasn't open when the in-tab timer would have fired.
+function checkDueNotifications(){
+  if(!('Notification' in window)||Notification.permission!=='granted'||!getNotifPref())return;
+  const official=selectedOfficial();if(!official)return;
+  const now=new Date();
+  if(now.getHours()<8)return;
+  const ts=todayStr();
+  const firedKey='idhf-notif-fired-'+official+'-'+ts;
+  if(localStorage.getItem(firedKey))return;
+  const myToday=myGamesForNotify(official).filter(g=>g.date===ts);
+  if(!myToday.length)return;
+  myToday.forEach(g=>{
+    const roleTag=g.role==='ref'?'🏒 Ref':'📋 Scorer';
+    new Notification('🏒 Game Day — IDHF',{
+      body:roleTag+' · '+g.time+' · '+g.away+' vs '+g.home+' · Inwood Ice Arena ('+g.league.toUpperCase()+')',
+      tag:'idhf-'+gameKey(g.league,g)
+    });
+  });
+  localStorage.setItem(firedKey,'1');
+}
+
 // ── BOOT ──────────────────────────────────────────────────────────────────
 (function bootRender(){
   buildOfficialDropdown();
   render();updateMineBadge();
+  setTimeout(checkDueNotifications,2000);
   // Homepage shown after Firebase init so roster is loaded
 })();
 
