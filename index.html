@@ -740,14 +740,17 @@ function toggleCommMode(){if(commMode){lockComm();return;}document.getElementByI
 function checkPin(){
   if(document.getElementById('pinInput').value.trim()===COMM_PIN){
     closeModal('pinModal');commMode=true;
+    // Clear any ref selection — commissioner works as commissioner only
+    const sel=document.getElementById('officialSelect');
+    sel.value='';
+    sel.closest('.official-bar').style.opacity='0.4';
+    sel.disabled=true;
     document.getElementById('commBtn').classList.add('active');
     document.getElementById('commBar').classList.add('show');
-    document.getElementById('officialSelect').closest('.official-bar').style.opacity='0.4';
-    document.getElementById('officialSelect').disabled=true;
     document.querySelectorAll('.comm-only').forEach(el=>el.style.display='');
     updatePendingBadge();
-    const at=document.querySelector('.tab.active');
-    if(at&&at.id==='tab-profile')renderProfileTab();else render();
+    // Always land on Pending tab when commissioner logs in
+    switchTab('pending');
   }else{document.getElementById('pinError').textContent='Incorrect PIN.';document.getElementById('pinInput').value='';document.getElementById('pinInput').focus();}
 }
 function lockComm(){
@@ -755,13 +758,15 @@ function lockComm(){
   document.getElementById('comm-impersonate-bar').style.display='none';
   document.getElementById('commBtn').classList.remove('active');
   document.getElementById('commBar').classList.remove('show');
-  document.getElementById('officialSelect').closest('.official-bar').style.opacity='1';
-  document.getElementById('officialSelect').disabled=false;
+  const sel=document.getElementById('officialSelect');
+  sel.closest('.official-bar').style.opacity='1';
+  sel.disabled=false;
+  // Restore last ref selection
+  const lastOff=localStorage.getItem('idhf-last-official');
+  if(lastOff&&[...sel.options].some(o=>o.value===lastOff))sel.value=lastOff;
   document.querySelectorAll('.comm-only').forEach(el=>el.style.display='none');
-  const at=document.querySelector('.tab.active');
-  if(at&&(at.id==='tab-pending'||at.id==='tab-pay'))switchTab('ihl');
-  else if(at&&at.id==='tab-profile')renderProfileTab();
-  else render();
+  updateMineBadge();
+  switchTab('ihl');
 }
 function openReset(){document.getElementById('resetModal').classList.add('show');}
 async function confirmReset(){
