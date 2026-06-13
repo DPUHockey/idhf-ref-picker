@@ -1029,6 +1029,12 @@ async function saveCancellationsScorer(){localStorage.setItem('idhf-cancels-sc',
 async function saveArchived(){localStorage.setItem('idhf-archived',JSON.stringify(archived));try{await fbSet('archived',archived);}catch(e){}}
 
 function gameKey(league,g){return league+'|'+g.date+'|'+g.time+'|'+g.away+'|'+g.home;}
+// encodeURIComponent does NOT escape apostrophes ('). Team/ref names like "Moe Green's
+// Mobsters" then break onclick="fn('...')" attributes — the JS string literal terminates
+// early at the unescaped apostrophe, causing a silent syntax error (button does nothing).
+// euc() is a drop-in replacement that also escapes ' to %27; decodeURIComponent still
+// round-trips %27 -> ' correctly, so this is safe everywhere encodeURIComponent was used.
+function euc(s){return encodeURIComponent(String(s)).replace(/'/g,'%27');}
 function selectedOfficial(){return document.getElementById('officialSelect').value;}
 function leagueLogo(league){const img=document.querySelector('header img[alt="'+(league==='ihl'?'IHL':'FHL')+'"]');return img?img.src:'';}
 const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
@@ -1107,24 +1113,24 @@ function render(){
       if(avail.length){
         html+='<div class="avail-list">';
         avail.forEach(name=>{
-          const isChosen=appName===name,sk=encodeURIComponent(key),sn=encodeURIComponent(name);
+          const isChosen=appName===name,sk=euc(key),sn=euc(name);
           html+='<div class="avail-item">';
           if(isChosen)html+='<span class="assigned-star">★</span>';
           html+='<span class="avail-name'+(isChosen?' is-assigned':'')+'">'+name+'</span>';
-          if(commMode&&!isChosen&&(po?(avail.filter(n=>approved[key]===n).length<2):!isApproved))html+='<button class="comm-pick-btn" data-key="'+encodeURIComponent(key)+'" data-name="'+encodeURIComponent(name)+'" onclick="approveRef(this)">Assign Ref</button>';
-          if(commMode&&isChosen&&!_commImpersonating)html+='<button class="comm-undo-btn" data-key="'+encodeURIComponent(key)+'" onclick="unapproveRef(this)">↺</button>';
-          if((!isApproved&&!commMode&&name===official)||(_commImpersonating&&name===official))html+='<button class="avail-remove-btn" data-key="'+encodeURIComponent(key)+'" data-name="'+encodeURIComponent(name)+'" onclick="removeAvail(event,this)">✕</button>';
+          if(commMode&&!isChosen&&(po?(avail.filter(n=>approved[key]===n).length<2):!isApproved))html+='<button class="comm-pick-btn" data-key="'+euc(key)+'" data-name="'+euc(name)+'" onclick="approveRef(this)">Assign Ref</button>';
+          if(commMode&&isChosen&&!_commImpersonating)html+='<button class="comm-undo-btn" data-key="'+euc(key)+'" onclick="unapproveRef(this)">↺</button>';
+          if((!isApproved&&!commMode&&name===official)||(_commImpersonating&&name===official))html+='<button class="avail-remove-btn" data-key="'+euc(key)+'" data-name="'+euc(name)+'" onclick="removeAvail(event,this)">✕</button>';
           html+='</div>';
         });
         html+='</div>';
       } else if(isApproved){
-        html+='<div class="avail-item"><span class="assigned-star">★</span><span class="avail-name is-assigned">'+appName+'</span>'+(commMode?'<button class="comm-undo-btn" data-key="'+encodeURIComponent(key)+'" onclick="unapproveRef(this)">↺</button>':'')+'</div>';
+        html+='<div class="avail-item"><span class="assigned-star">★</span><span class="avail-name is-assigned">'+appName+'</span>'+(commMode?'<button class="comm-undo-btn" data-key="'+euc(key)+'" onclick="unapproveRef(this)">↺</button>':'')+'</div>';
       }
       // Ref action button — show when in ref mode OR when commissioner is impersonating
       if(!commMode||_commImpersonating){
         if(isMineRef)html+='<span class="got-it-badge" style="font-size:11px;margin-top:4px;display:inline-block;">🎉 You\'re the Ref!</span>';
-        else if(isRef&&!iAmAvailRef&&!isApproved)html+='<button class="mark-avail-btn" style="margin-top:4px;font-size:11px;" data-key="'+encodeURIComponent(key)+'" onclick="markAvail(this)">I\'ll Ref</button>';
-        else if(iAmAvailRef&&!isApproved)html+='<button class="mark-avail-btn" style="margin-top:4px;font-size:11px;background:#3a5a8a;border-color:#3a5a8a;" data-key="'+encodeURIComponent(key)+'" data-name="'+encodeURIComponent(official)+'" onclick="removeAvailSelf(event,this)">✓ Available — tap to remove</button>';
+        else if(isRef&&!iAmAvailRef&&!isApproved)html+='<button class="mark-avail-btn" style="margin-top:4px;font-size:11px;" data-key="'+euc(key)+'" onclick="markAvail(this)">I\'ll Ref</button>';
+        else if(iAmAvailRef&&!isApproved)html+='<button class="mark-avail-btn" style="margin-top:4px;font-size:11px;background:#3a5a8a;border-color:#3a5a8a;" data-key="'+euc(key)+'" data-name="'+euc(official)+'" onclick="removeAvailSelf(event,this)">✓ Available — tap to remove</button>';
       }
       html+='</div>';
 
@@ -1134,7 +1140,7 @@ function render(){
       if(availSc.length){
         html+='<div class="avail-list">';
         availSc.forEach(name=>{
-          const isChosen=appScorer===name,sk=encodeURIComponent(key),sn=encodeURIComponent(name);
+          const isChosen=appScorer===name,sk=euc(key),sn=euc(name);
           html+='<div class="avail-item">';
           if(isChosen)html+='<span class="assigned-star" style="color:#1a7a3c;">★</span>';
           html+='<span class="avail-name'+(isChosen?' is-assigned':'')+'">'+name+'</span>';
@@ -1145,12 +1151,12 @@ function render(){
         });
         html+='</div>';
       } else if(isScorerApproved){
-        html+='<div class="avail-item"><span class="assigned-star" style="color:#1a7a3c;">★</span><span class="avail-name is-assigned">'+appScorer+'</span>'+(commMode?'<button class="comm-undo-btn" data-key="'+encodeURIComponent(key)+'" onclick="unapproveScorer(this)">↺</button>':'')+'</div>';
+        html+='<div class="avail-item"><span class="assigned-star" style="color:#1a7a3c;">★</span><span class="avail-name is-assigned">'+appScorer+'</span>'+(commMode?'<button class="comm-undo-btn" data-key="'+euc(key)+'" onclick="unapproveScorer(this)">↺</button>':'')+'</div>';
       }
       if(!commMode||_commImpersonating){
         if(isMineScorer)html+='<span class="got-it-badge" style="font-size:11px;margin-top:4px;display:inline-block;background:#1a7a3c;">📋 You\'re Scoring!</span>';
-        else if(isScorer&&!iAmAvailScorer&&!isScorerApproved)html+='<button class="mark-avail-btn" style="margin-top:4px;font-size:11px;background:#1a5a3a;" data-key="'+encodeURIComponent(key)+'" onclick="markScorerAvail(this)">I\'ll Score</button>';
-        else if(iAmAvailScorer&&!isScorerApproved)html+='<button class="mark-avail-btn" style="margin-top:4px;font-size:11px;background:#1a5a3a;border-color:#1a5a3a;opacity:0.75;" data-key="'+encodeURIComponent(key)+'" data-name="'+encodeURIComponent(official)+'" onclick="removeScorerAvailSelf(event,this)">✓ Available — tap to remove</button>';
+        else if(isScorer&&!iAmAvailScorer&&!isScorerApproved)html+='<button class="mark-avail-btn" style="margin-top:4px;font-size:11px;background:#1a5a3a;" data-key="'+euc(key)+'" onclick="markScorerAvail(this)">I\'ll Score</button>';
+        else if(iAmAvailScorer&&!isScorerApproved)html+='<button class="mark-avail-btn" style="margin-top:4px;font-size:11px;background:#1a5a3a;border-color:#1a5a3a;opacity:0.75;" data-key="'+euc(key)+'" data-name="'+euc(official)+'" onclick="removeScorerAvailSelf(event,this)">✓ Available — tap to remove</button>';
       }
       html+='</div>';
 
@@ -1391,7 +1397,7 @@ function renderMyGames(){
   myGames.forEach(g=>{
     const isRef=g.myRole==='ref',isToday=g.date===ts,isPastGame=isPast(g.date),ll=g.league.toUpperCase();
     const[y,m,d]=g.date.split('-').map(Number),dt=new Date(y,m-1,d),ds=DAYS[dt.getDay()]+' '+MS[m-1]+' '+d;
-    const key=gameKey(g.league,g),sk=encodeURIComponent(key);
+    const key=gameKey(g.league,g),sk=euc(key);
     const done=isRef?completedOverrides[key]===true:completedScorer[key]===true;
     const rate=isRef?PAY_RATE:SCORER_RATE;
     const roleTag=isRef?'🏒 Ref':'📋 Scorer';
@@ -1488,7 +1494,7 @@ function renderDoneGames(){
     pastGames.forEach(g=>{
       const key=gameKey(g.league,g),refName=approved[key],done=completedOverrides[key]===true;
       const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
-      const sk=encodeURIComponent(key);
+      const sk=euc(key);
       html+='<div class="my-game-row" style="background:'+(done?'#f0faf0':'#fff')+';border-left:4px solid '+(done?'#1a7a3c':'var(--border)')+'">';
       html+='<div class="my-game-row-top"><span class="my-game-date">'+ds+'</span><span style="color:var(--muted);font-size:11px;">·</span><span class="my-game-time">'+g.time+'</span><span class="my-game-league'+(g.league==='fhl'?' fhl':'')+'">'+g.league.toUpperCase()+'</span></div>';
       html+='<div class="my-game-matchup">'+g.away+' vs '+g.home+'</div>';
@@ -1510,7 +1516,7 @@ function renderDoneGames(){
   myPast.forEach(g=>{
     const key=gameKey(g.league,g),done=completedOverrides[key]===true;
     const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
-    const sk=encodeURIComponent(key);
+    const sk=euc(key);
     html+='<div class="my-game-row" style="background:'+(done?'#f0faf0':'#fff')+';border-left:4px solid '+(done?'#1a7a3c':'var(--border)')+'">';
     html+='<div class="my-game-row-top"><span class="my-game-date">'+ds+'</span><span style="color:var(--muted);font-size:11px;">·</span><span class="my-game-time">'+g.time+'</span><span class="my-game-league'+(g.league==='fhl'?' fhl':'')+'">'+g.league.toUpperCase()+'</span></div>';
     html+='<div class="my-game-matchup">'+g.away+' vs '+g.home+'</div>';
@@ -1693,13 +1699,13 @@ function buildPendingHtml(){
     html+='<div class="cancellation-section-header" style="background:#e08800;">🔴 Needs Replacement — '+nrGames.length+' game'+(nrGames.length>1?'s':'')+' open</div>';
     nrGames.forEach(({key,g})=>{
       const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
-      const avail=availability[key]||[],sk=encodeURIComponent(key);
+      const avail=availability[key]||[],sk=euc(key);
       const leagueTab=g.league;
       html+='<div style="background:#fff8e6;border-left:4px solid #e08800;padding:11px 14px;border-bottom:1px solid #f0d080;cursor:pointer;" onclick="switchTab(\''+leagueTab+'\')">';
       html+='<div style="font-size:10px;font-weight:700;color:#e08800;margin-bottom:4px;">🏒 REFEREE NEEDED</div>';
       html+='<div style="font-size:13px;font-weight:600;color:var(--dark);">'+g.away+' vs '+g.home+'</div>';
       html+='<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+ds+' · '+g.time+' · '+g.league.toUpperCase()+'</div>';
-      if(avail.length){html+='<div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">';avail.forEach(name=>{const sn=encodeURIComponent(name);html+='<div style="display:flex;align-items:center;gap:6px;font-size:12px;" onclick="event.stopPropagation()"><span style="font-weight:600;">'+name+'</span><button class="comm-pick-btn" data-key="'+sk+'" data-name="'+sn+'" onclick="approveRefNR(this)">✓ Assign</button></div>';});html+='</div>';}
+      if(avail.length){html+='<div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">';avail.forEach(name=>{const sn=euc(name);html+='<div style="display:flex;align-items:center;gap:6px;font-size:12px;" onclick="event.stopPropagation()"><span style="font-weight:600;">'+name+'</span><button class="comm-pick-btn" data-key="'+sk+'" data-name="'+sn+'" onclick="approveRefNR(this)">✓ Assign</button></div>';});html+='</div>';}
       else html+='<div style="font-size:12px;color:var(--muted);margin-top:6px;font-style:italic;">No refs available yet.</div>';
       html+='</div>';
     });
@@ -1709,7 +1715,7 @@ function buildPendingHtml(){
   if(cancelRef.length){
     html+='<div class="cancellation-section-header">🏒 Ref Cancellations — '+cancelRef.length+'</div>';
     cancelRef.forEach(({key,c,g})=>{
-      const sk=encodeURIComponent(key);
+      const sk=euc(key);
       const ts=c.timestamp?new Date(c.timestamp).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
       const gameDesc=g?(()=>{const[y,m,d]=g.date.split('-').map(Number);return DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d+' · '+g.time+' · '+g.league.toUpperCase();})():'(game details unavailable)';
       const matchup=g?(g.away+' vs '+g.home):key.split('|').slice(3).join(' vs ')||'Unknown game';
@@ -1726,7 +1732,7 @@ function buildPendingHtml(){
   if(cancelScorer.length){
     html+='<div class="cancellation-section-header" style="background:#1a5a3a;">📋 Scorer Cancellations — '+cancelScorer.length+'</div>';
     cancelScorer.forEach(({key,c,g})=>{
-      const sk=encodeURIComponent(key);
+      const sk=euc(key);
       const ts=c.timestamp?new Date(c.timestamp).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
       const gameDesc=g?(()=>{const[y,m,d]=g.date.split('-').map(Number);return DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d+' · '+g.time+' · '+g.league.toUpperCase();})():'(game details unavailable)';
       const matchup=g?(g.away+' vs '+g.home):key.split('|').slice(3).join(' vs ')||'Unknown game';
@@ -1749,7 +1755,7 @@ function buildPendingHtml(){
       html+='<span class="pending-league'+(g.league==='fhl'?' fhl':'')+'">'+g.league.toUpperCase()+'</span>';
       html+='<div class="pending-info"><div class="pending-matchup">'+g.away+' vs '+g.home+'</div><div class="pending-meta">'+ds+' · '+g.time+'</div>';
       html+='<div class="pending-avail">';
-      avail.forEach(name=>{const sk=encodeURIComponent(key),sn=encodeURIComponent(name);html+='<div class="pending-avail-item" onclick="event.stopPropagation()"><span style="font-weight:600;">'+name+'</span><button class="comm-pick-btn" data-key="'+sk+'" data-name="'+sn+'" onclick="approveRef(this)">✓ Assign Ref</button></div>';});
+      avail.forEach(name=>{const sk=euc(key),sn=euc(name);html+='<div class="pending-avail-item" onclick="event.stopPropagation()"><span style="font-weight:600;">'+name+'</span><button class="comm-pick-btn" data-key="'+sk+'" data-name="'+sn+'" onclick="approveRef(this)">✓ Assign Ref</button></div>';});
       html+='</div></div></div>';
     });
   }
@@ -1764,7 +1770,7 @@ function buildPendingHtml(){
       html+='<span class="pending-league'+(g.league==='fhl'?' fhl':'')+'" style="background:#1a7a3c;">'+g.league.toUpperCase()+'</span>';
       html+='<div class="pending-info"><div class="pending-matchup">'+g.away+' vs '+g.home+'</div><div class="pending-meta">'+ds+' · '+g.time+'</div>';
       html+='<div class="pending-avail">';
-      avail.forEach(name=>{const sk=encodeURIComponent(key),sn=encodeURIComponent(name);html+='<div class="pending-avail-item" onclick="event.stopPropagation()"><span style="font-weight:600;">'+name+'</span><button class="comm-pick-btn" style="background:#1a5a3a;border-color:#1a5a3a;" data-key="'+sk+'" data-name="'+sn+'" onclick="approveScorer(this)">✓ Assign Scorer</button></div>';});
+      avail.forEach(name=>{const sk=euc(key),sn=euc(name);html+='<div class="pending-avail-item" onclick="event.stopPropagation()"><span style="font-weight:600;">'+name+'</span><button class="comm-pick-btn" style="background:#1a5a3a;border-color:#1a5a3a;" data-key="'+sk+'" data-name="'+sn+'" onclick="approveScorer(this)">✓ Assign Scorer</button></div>';});
       html+='</div></div></div>';
     });
   }
@@ -1815,7 +1821,7 @@ function renderPayroll(){
   // Clickable ref cards
   refs.forEach(name=>{
     const r=refMap[name],earned=r.earned,paid=getRefTotalPaid(name),balance=earned-paid;
-    const sn=encodeURIComponent(name);
+    const sn=euc(name);
     const breakdown=[];
     if(r.completed.length)breakdown.push('🏒 '+r.completed.length+'×$'+PAY_RATE);
     if(r.scorerCompleted&&r.scorerCompleted.length)breakdown.push('📋 '+r.scorerCompleted.length+'×$'+SCORER_RATE);
@@ -2171,8 +2177,8 @@ function showProfileContent(name){
   ci+='<div class="profile-contact-row"><span class="profile-contact-label">✉️ Email</span><span class="profile-contact-value">'+(p.email||'<span style="color:var(--muted);font-style:italic;">Not set</span>')+'</span></div>';
   ci+='<div class="profile-contact-row"><span class="profile-contact-label">🔒 PIN</span><span class="profile-contact-value" style="letter-spacing:4px;">'+(p.pin?'• • •':'<span style="color:var(--muted);font-style:italic;">Not set</span>')+'</span></div>';
   ci+='<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">';
-  ci+='<button onclick="openRefEditProfile(\''+encodeURIComponent(name)+'\')" style="font-size:12px;font-weight:700;color:var(--maroon);background:var(--maroon-light);border:1px solid #d0a0a8;border-radius:5px;padding:7px 14px;cursor:pointer;">✏️ Edit My Info</button>';
-  ci+='<button onclick="openRoleEditor(\''+encodeURIComponent(name)+'\')" style="font-size:12px;font-weight:700;color:#1a5a3a;background:#e6f4ec;border:1px solid #90c0a0;border-radius:5px;padding:7px 14px;cursor:pointer;">🎽 Edit Roles</button>';
+  ci+='<button onclick="openRefEditProfile(\''+euc(name)+'\')" style="font-size:12px;font-weight:700;color:var(--maroon);background:var(--maroon-light);border:1px solid #d0a0a8;border-radius:5px;padding:7px 14px;cursor:pointer;">✏️ Edit My Info</button>';
+  ci+='<button onclick="openRoleEditor(\''+euc(name)+'\')" style="font-size:12px;font-weight:700;color:#1a5a3a;background:#e6f4ec;border:1px solid #90c0a0;border-radius:5px;padding:7px 14px;cursor:pointer;">🎽 Edit Roles</button>';
   ci+='</div>';
   document.getElementById('profile-contact-info').innerHTML=ci;
   // Games
@@ -2338,7 +2344,7 @@ function renderCommRoster(){
     const p=profiles[name]||{},myGames=ag.filter(g=>approved[gameKey(g.league,g)]===name),completed=myGames.filter(g=>isGameComplete(g)),upcoming=myGames.filter(g=>!isPast(g.date));
     const earned=completed.length*PAY_RATE,paid=getRefTotalPaid(name),balance=earned-paid;
     const balColor=balance>0?'var(--maroon)':(balance<0?'#7a4000':'#1a7a3c'),balTxt=balance>0?'-$'+balance:(balance<0?'+$'+Math.abs(balance):'✓ Clear');
-    const initials=name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase(),sn=encodeURIComponent(name);
+    const initials=name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase(),sn=euc(name);
     html+='<div class="ref-card">';
     html+='<div class="ref-card-header"><div class="ref-card-avatar">'+initials+'</div><div style="flex:1;min-width:0;"><div class="ref-card-name">'+name+'</div>';
     html+='<div class="ref-card-sub" style="display:flex;flex-direction:column;gap:2px;margin-top:3px;">';
@@ -2361,7 +2367,7 @@ function renderCommRoster(){
       const a=archived[name];
       const dt=a.archivedAt?new Date(a.archivedAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';
       const initials=name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
-      const sn=encodeURIComponent(name);
+      const sn=euc(name);
       html+='<div class="ref-card" style="opacity:0.7;background:#fafafa;">';
       html+='<div class="ref-card-header"><div class="ref-card-avatar" style="background:#888;color:#fff;">'+initials+'</div>';
       html+='<div style="flex:1;min-width:0;"><div class="ref-card-name" style="color:#666;">'+name+'</div>';
@@ -2481,7 +2487,7 @@ function hpShowRefEntry(){
     const initials=name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
     const p=profiles[name]||{};
     const sub=p.phone||p.email||'Tap to sign in';
-    return '<div class="ref-list-item" onclick="hpRefPick(\''+encodeURIComponent(name)+'\')">'
+    return '<div class="ref-list-item" onclick="hpRefPick(\''+euc(name)+'\')">'
       +'<div class="ref-list-avatar">'+initials+'</div>'
       +'<div><div class="ref-list-name">'+name+'</div><div class="ref-list-sub">'+sub+'</div></div>'
       +'</div>';
