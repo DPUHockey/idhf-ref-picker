@@ -441,7 +441,30 @@
   </div>
 </div>
 
-<!-- ── HOMEPAGE ── -->
+<!-- ROLE EDITOR MODAL -->
+<div class="modal-overlay" id="roleEditorModal">
+  <div class="modal" style="max-width:320px;">
+    <h3>🎽 My Roles</h3>
+    <p>Choose what you want to do this season. You can work as both.</p>
+    <div style="display:flex;gap:10px;margin:16px 0;">
+      <div id="re-role-ref" onclick="reToggleRole('ref')" style="flex:1;padding:14px 8px;border-radius:10px;text-align:center;cursor:pointer;border:2px solid #2a3a6a;background:#1a2545;color:#7a9ab0;">
+        <div style="font-size:24px;">🏒</div>
+        <div style="font-size:13px;font-weight:700;margin-top:4px;">Referee</div>
+        <div style="font-size:10px;color:inherit;margin-top:2px;opacity:0.7;">$65/game</div>
+      </div>
+      <div id="re-role-scorer" onclick="reToggleRole('scorer')" style="flex:1;padding:14px 8px;border-radius:10px;text-align:center;cursor:pointer;border:2px solid #2a3a6a;background:#1a2545;color:#7a9ab0;">
+        <div style="font-size:24px;">📋</div>
+        <div style="font-size:13px;font-weight:700;margin-top:4px;">Scorekeeper</div>
+        <div style="font-size:10px;color:inherit;margin-top:2px;opacity:0.7;">$30/game</div>
+      </div>
+    </div>
+    <div class="pin-error" id="roleEditorError"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('roleEditorModal')">Cancel</button>
+      <button class="btn-primary" onclick="confirmRoleEdit()">Save Roles</button>
+    </div>
+  </div>
+</div>
 <div id="homepage">
   <!-- Logo -->
   <div class="home-logo">
@@ -491,7 +514,14 @@
   <div class="home-screen" id="hp-new-ref">
     <button class="home-back" onclick="hpShow('ref-entry')">Back</button>
     <div class="home-heading">Create Your Profile</div>
-    <div class="home-sub-text">Fill in your info — you'll use this PIN to access pay details.</div>
+    <div class="home-sub-text">What will you be doing?</div>
+    <div class="home-field">
+      <div class="zelle-row">
+        <div class="zelle-opt selected" id="role-ref" onclick="hpToggleRole('ref')">🏒 Referee</div>
+        <div class="zelle-opt" id="role-scorer" onclick="hpToggleRole('scorer')">📋 Scorekeeper</div>
+      </div>
+      <div style="font-size:11px;color:#5a7a9a;margin-top:6px;">Select one or both</div>
+    </div>
     <div class="home-field"><label>First Name</label><input class="home-input" id="hp-first" type="text" placeholder="First" autocomplete="given-name"></div>
     <div class="home-field"><label>Last Name</label><input class="home-input" id="hp-last" type="text" placeholder="Last" autocomplete="family-name"></div>
     <div class="home-field"><label>Phone</label><input class="home-input" id="hp-phone" type="tel" placeholder="(555) 555-5555" autocomplete="tel"></div>
@@ -501,7 +531,7 @@
       <div class="zelle-row">
         <div class="zelle-opt" id="zelle-phone" onclick="hpZelle('phone')">📱 Yes — same as phone</div>
         <div class="zelle-opt" id="zelle-other" onclick="hpZelle('other')">✏️ Yes — different</div>
-        <div class="zelle-opt" id="zelle-no" onclick="hpZelle('no')">✗ No</div>
+        <div class="zelle-opt selected" id="zelle-no" onclick="hpZelle('no')">✗ No</div>
       </div>
     </div>
     <div class="home-field" id="hp-zelle-other-field" style="display:none;">
@@ -509,14 +539,6 @@
       <input class="home-input" id="hp-zelle-other-val" type="text" placeholder="Zelle email or number">
     </div>
     <div class="home-field"><label>Pick a 3-digit PIN</label><input class="home-pin-input" id="hp-new-pin" type="tel" inputmode="numeric" maxlength="3" placeholder="• • •" autocomplete="off" style="font-size:22px;padding:12px;letter-spacing:8px;"></div>
-    <div class="home-field">
-      <label>I want to work as</label>
-      <div class="zelle-row">
-        <div class="zelle-opt selected" id="role-ref" onclick="hpToggleRole('ref')">🏒 Referee</div>
-        <div class="zelle-opt" id="role-scorer" onclick="hpToggleRole('scorer')">📋 Scorekeeper</div>
-      </div>
-      <div style="font-size:11px;color:#5a7a9a;margin-top:6px;">Select one or both</div>
-    </div>
     <div class="home-error" id="hp-new-ref-error"></div>
     <button class="home-btn" onclick="hpCreateRef()">Create Profile & Sign In</button>
   </div>
@@ -529,6 +551,25 @@
     <input class="home-pin-input" id="hp-comm-pin" type="password" inputmode="numeric" maxlength="6" placeholder="••••" autocomplete="off">
     <div class="home-error" id="hp-comm-error"></div>
     <button class="home-btn" onclick="hpCheckCommPin()" style="margin-top:14px;">Enter</button>
+  </div>
+
+  <!-- Screen: choose roles (new users + returning users with no roles) -->
+  <div class="home-screen" id="hp-choose-roles">
+    <div class="home-heading" id="hp-cr-heading">One more thing…</div>
+    <div class="home-sub-text" id="hp-cr-sub">What will you be doing this season? You can always add a role later from your profile.</div>
+    <div style="display:flex;gap:12px;margin:20px 0;">
+      <div id="hp-cr-ref" onclick="hpCrToggle('ref')" style="flex:1;padding:20px 10px;border-radius:12px;text-align:center;cursor:pointer;border:2px solid #2a3a6a;background:#152040;color:#7a9ab0;transition:all 0.15s;">
+        <div style="font-size:32px;">🏒</div>
+        <div style="font-size:14px;font-weight:800;margin-top:6px;">Referee</div>
+      </div>
+      <div id="hp-cr-scorer" onclick="hpCrToggle('scorer')" style="flex:1;padding:20px 10px;border-radius:12px;text-align:center;cursor:pointer;border:2px solid #2a3a6a;background:#152040;color:#7a9ab0;transition:all 0.15s;">
+        <div style="font-size:32px;">📋</div>
+        <div style="font-size:14px;font-weight:800;margin-top:6px;">Scorekeeper</div>
+      </div>
+    </div>
+    <div style="font-size:12px;color:#5a7a9a;text-align:center;margin-bottom:12px;">Tap one or both</div>
+    <div class="home-error" id="hp-cr-error"></div>
+    <button class="home-btn" onclick="hpCrSave()">Continue →</button>
   </div>
 </div>
 
@@ -893,7 +934,7 @@ function render(){
 
       // ── REF SLOT ──
       html+='<div style="margin-top:8px;">';
-      html+='<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;">🏒 Referee ($'+PAY_RATE+')</div>';
+      html+='<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;">🏒 Referee</div>';
       if(avail.length){
         html+='<div class="avail-list">';
         avail.forEach(name=>{
@@ -920,7 +961,7 @@ function render(){
 
       // ── SCORER SLOT ──
       html+='<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eef1f8;">';
-      html+='<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;">📋 Scorekeeper ($'+SCORER_RATE+')</div>';
+      html+='<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;">📋 Scorekeeper</div>';
       if(availSc.length){
         html+='<div class="avail-list">';
         availSc.forEach(name=>{
@@ -950,10 +991,28 @@ function render(){
   document.getElementById('games-list').innerHTML=html;
 }
 
-function markAvail(el){const key=decodeURIComponent(el.dataset.key),name=selectedOfficial();if(!name){showBanner('Select your name first');return;}if(approved[key]){showBanner('Game already assigned');return;}if(!availability[key])availability[key]=[];if(!availability[key].includes(name))availability[key].push(name);saveAll();render();}
+function markAvail(el){
+  const key=decodeURIComponent(el.dataset.key),name=selectedOfficial();
+  if(!name){showBanner('Select your name first');return;}
+  if(approved[key]){showBanner('Game already assigned');return;}
+  // Block: can't ref a game you're already scoring
+  if((availabilityScorer[key]||[]).includes(name)||approvedScorer[key]===name){showBanner('You\'re already down to score this game');return;}
+  if(!availability[key])availability[key]=[];
+  if(!availability[key].includes(name))availability[key].push(name);
+  saveAll();render();
+}
 function removeAvail(e,el){e.stopPropagation();const key=decodeURIComponent(el.dataset.key),name=decodeURIComponent(el.dataset.name);if(!availability[key])return;availability[key]=availability[key].filter(n=>n!==name);if(!availability[key].length)delete availability[key];saveAll();render();}
-function markScorerAvail(el){const key=decodeURIComponent(el.dataset.key),name=selectedOfficial();if(!name){showBanner('Select your name first');return;}if(approvedScorer[key]){showBanner('Scorer already assigned');return;}if(!availabilityScorer[key])availabilityScorer[key]=[];if(!availabilityScorer[key].includes(name))availabilityScorer[key].push(name);saveAll();render();}
 function removeScorerAvail(e,el){e.stopPropagation();const key=decodeURIComponent(el.dataset.key),name=decodeURIComponent(el.dataset.name);if(!availabilityScorer[key])return;availabilityScorer[key]=availabilityScorer[key].filter(n=>n!==name);if(!availabilityScorer[key].length)delete availabilityScorer[key];saveAll();render();}
+function markScorerAvail(el){
+  const key=decodeURIComponent(el.dataset.key),name=selectedOfficial();
+  if(!name){showBanner('Select your name first');return;}
+  if(approvedScorer[key]){showBanner('Scorer already assigned');return;}
+  // Block: can't score a game you're already reffing
+  if((availability[key]||[]).includes(name)||approved[key]===name){showBanner('You\'re already down to ref this game');return;}
+  if(!availabilityScorer[key])availabilityScorer[key]=[];
+  if(!availabilityScorer[key].includes(name))availabilityScorer[key].push(name);
+  saveAll();render();
+}
 function approveScorer(el){const key=decodeURIComponent(el.dataset.key),name=decodeURIComponent(el.dataset.name);approvedScorer[key]=name;saveAll();render();showBanner(name+' assigned as Scorer');}
 function unapproveScorer(el){const key=decodeURIComponent(el.dataset.key);delete approvedScorer[key];saveAll();render();showBanner('Scorer assignment undone');}
 function approveRef(el){
@@ -1170,7 +1229,7 @@ function renderMyGames(){
     html+='<span style="font-size:9px;font-weight:700;background:'+roleColor+';color:#fff;border-radius:3px;padding:2px 5px;">'+roleTag+'</span></div>';
     html+='<div class="my-game-matchup">'+g.away+' vs '+g.home+'</div>';
     const hasCancelled=isRef&&cancellations[key]&&cancellations[key].refName===official&&cancellations[key].seen===false;
-    html+='<div class="my-game-row-bot"><span class="my-game-arena">$'+rate+' · Inwood Ice Arena</span><div style="display:flex;gap:6px;align-items:center;">';
+    html+='<div class="my-game-row-bot"><span class="my-game-arena">Inwood Ice Arena</span><div style="display:flex;gap:6px;align-items:center;">';
     if(hasCancelled){
       html+='<span style="font-size:11px;font-weight:700;color:#e08800;background:#fff8e6;border:1px solid #f0d080;border-radius:4px;padding:4px 8px;white-space:nowrap;">⏳ Cancellation pending</span>';
     } else if(!isPastGame&&!done&&isRef){
@@ -1681,10 +1740,16 @@ function showProfileContent(name){
   document.getElementById('ps-upcoming').textContent=upcoming.length;
   // Contact info
   let ci='';
+  const roles=p.roles||['ref'];
+  const roleLabels=roles.map(r=>r==='ref'?'🏒 Referee':'📋 Scorekeeper').join(' · ');
+  ci+='<div class="profile-contact-row"><span class="profile-contact-label">🎽 Role</span><span class="profile-contact-value">'+roleLabels+'</span></div>';
   ci+='<div class="profile-contact-row"><span class="profile-contact-label">📞 Phone</span><span class="profile-contact-value">'+(p.phone||'<span style="color:var(--muted);font-style:italic;">Not set</span>')+'</span></div>';
   ci+='<div class="profile-contact-row"><span class="profile-contact-label">✉️ Email</span><span class="profile-contact-value">'+(p.email||'<span style="color:var(--muted);font-style:italic;">Not set</span>')+'</span></div>';
   ci+='<div class="profile-contact-row"><span class="profile-contact-label">🔒 PIN</span><span class="profile-contact-value" style="letter-spacing:4px;">'+(p.pin?'• • •':'<span style="color:var(--muted);font-style:italic;">Not set</span>')+'</span></div>';
-  ci+='<div style="margin-top:12px;"><button onclick="openRefEditProfile(\''+encodeURIComponent(name)+'\')" style="font-size:12px;font-weight:700;color:var(--maroon);background:var(--maroon-light);border:1px solid #d0a0a8;border-radius:5px;padding:7px 14px;cursor:pointer;">✏️ Edit My Info</button></div>';
+  ci+='<div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;">';
+  ci+='<button onclick="openRefEditProfile(\''+encodeURIComponent(name)+'\')" style="font-size:12px;font-weight:700;color:var(--maroon);background:var(--maroon-light);border:1px solid #d0a0a8;border-radius:5px;padding:7px 14px;cursor:pointer;">✏️ Edit My Info</button>';
+  ci+='<button onclick="openRoleEditor(\''+encodeURIComponent(name)+'\')" style="font-size:12px;font-weight:700;color:#1a5a3a;background:#e6f4ec;border:1px solid #90c0a0;border-radius:5px;padding:7px 14px;cursor:pointer;">🎽 Edit Roles</button>';
+  ci+='</div>';
   document.getElementById('profile-contact-info').innerHTML=ci;
   // Games
   const ts=todayStr();let gl='';
@@ -1694,6 +1759,40 @@ function showProfileContent(name){
 }
 
 function lockProfile(){_profileUnlocked=null;renderProfileTab();if(document.querySelector('.tab.active').id==='tab-mypay')renderMyPay();}
+
+// ── ROLE EDITOR ───────────────────────────────────────────────────────────
+let _reEditingName=null,_reRoles=new Set();
+function openRoleEditor(en){
+  const name=decodeURIComponent(en);_reEditingName=name;
+  const p=profiles[name]||{};
+  _reRoles=new Set(p.roles||['ref']);
+  reUpdateUI();
+  document.getElementById('roleEditorError').textContent='';
+  document.getElementById('roleEditorModal').classList.add('show');
+}
+function reUpdateUI(){
+  const refEl=document.getElementById('re-role-ref');
+  const scEl=document.getElementById('re-role-scorer');
+  const sel='border:2px solid var(--gold);background:#1a3a7a;color:#fff;';
+  const unsel='border:2px solid #2a3a6a;background:#1a2545;color:#7a9ab0;';
+  refEl.style.cssText='flex:1;padding:14px 8px;border-radius:10px;text-align:center;cursor:pointer;'+(_reRoles.has('ref')?sel:unsel);
+  scEl.style.cssText='flex:1;padding:14px 8px;border-radius:10px;text-align:center;cursor:pointer;'+(_reRoles.has('scorer')?sel:unsel);
+}
+function reToggleRole(role){
+  if(_reRoles.has(role)&&_reRoles.size>1)_reRoles.delete(role);
+  else _reRoles.add(role);
+  reUpdateUI();
+}
+async function confirmRoleEdit(){
+  if(!_reEditingName)return;
+  if(!profiles[_reEditingName])profiles[_reEditingName]={};
+  profiles[_reEditingName].roles=[..._reRoles];
+  await saveProfiles();
+  closeModal('roleEditorModal');
+  showBanner('Roles updated!');
+  showProfileContent(_reEditingName);
+  render(); // refresh schedule to show correct slots
+}
 function signOutRef(){
   _profileUnlocked=null;
   const sel=document.getElementById('officialSelect');
@@ -1899,7 +1998,7 @@ async function initFirebase(){
 }
 
 // ── HOMEPAGE ──────────────────────────────────────────────────────────────
-let _hpZelleChoice='no',_hpSelectedRef=null,_hpRoles=new Set(['ref']);
+let _hpZelleChoice='no',_hpSelectedRef=null,_hpRoles=new Set();
 
 function hpToggleRole(role){
   if(_hpRoles.has(role)&&_hpRoles.size>1)_hpRoles.delete(role);
@@ -1923,6 +2022,13 @@ function hpInit(){
   const lastOff=localStorage.getItem('idhf-last-official');
   if(lastOff&&officials.includes(lastOff)){
     if(profiles[lastOff]&&profiles[lastOff].pin){
+      // Check they have roles set — if not, make them choose
+      if(!profiles[lastOff].roles||profiles[lastOff].roles.length===0){
+        _hpCrName=lastOff;_hpCrRoles=new Set();
+        hpCrUpdateUI();
+        document.getElementById('homepage').classList.remove('hidden');
+        hpShow('choose-roles');return;
+      }
       hpEnterAsRef(lastOff);return;
     }
   }
@@ -1972,12 +2078,44 @@ function hpCheckRefPin(){
   const p=profiles[name]||{};
   if(p.pin&&p.pin===entered){
     _profileUnlocked=name;
+    // Check for missing roles — redirect to choose-roles before entering app
+    if(!p.roles||p.roles.length===0){
+      hpShowChooseRoles(name);return;
+    }
     hpEnterAsRef(name);
   } else {
     document.getElementById('hp-ref-pin-error').textContent='Incorrect PIN — try again.';
     document.getElementById('hp-ref-pin-input').value='';
     document.getElementById('hp-ref-pin-input').focus();
   }
+}
+
+// ── CHOOSE ROLES (for returning users with no roles set) ──────────────────
+let _hpCrName=null,_hpCrRoles=new Set();
+function hpShowChooseRoles(name){
+  _hpCrName=name;_hpCrRoles=new Set();
+  document.getElementById('hp-cr-error').textContent='';
+  hpCrUpdateUI();
+  document.getElementById('homepage').classList.remove('hidden');
+  hpShow('choose-roles');
+}
+function hpCrToggle(role){
+  if(_hpCrRoles.has(role))_hpCrRoles.delete(role);
+  else _hpCrRoles.add(role);
+  hpCrUpdateUI();
+}
+function hpCrUpdateUI(){
+  const sel='border:2px solid var(--gold);background:#1a3a7a;color:#fff;';
+  const unsel='border:2px solid #2a3a6a;background:#152040;color:#7a9ab0;';
+  document.getElementById('hp-cr-ref').style.cssText='flex:1;padding:20px 10px;border-radius:12px;text-align:center;cursor:pointer;transition:all 0.15s;'+(_hpCrRoles.has('ref')?sel:unsel);
+  document.getElementById('hp-cr-scorer').style.cssText='flex:1;padding:20px 10px;border-radius:12px;text-align:center;cursor:pointer;transition:all 0.15s;'+(_hpCrRoles.has('scorer')?sel:unsel);
+}
+async function hpCrSave(){
+  if(_hpCrRoles.size===0){document.getElementById('hp-cr-error').textContent='Pick at least one role to continue.';return;}
+  if(!profiles[_hpCrName])profiles[_hpCrName]={};
+  profiles[_hpCrName].roles=[..._hpCrRoles];
+  await saveProfiles();
+  hpEnterAsRef(_hpCrName);
 }
 document.addEventListener('keydown',e=>{
   const refPinScreen=document.getElementById('hp-ref-pin');
@@ -1989,10 +2127,10 @@ document.addEventListener('keydown',e=>{
 function hpShowNewRef(){
   ['hp-first','hp-last','hp-phone','hp-email','hp-zelle-other-val','hp-new-pin'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   _hpZelleChoice='no';
-  _hpRoles=new Set(['ref']);
+  _hpRoles=new Set();
   document.querySelectorAll('.zelle-opt').forEach(o=>o.classList.remove('selected'));
   document.getElementById('zelle-no').classList.add('selected');
-  document.getElementById('role-ref').classList.add('selected');
+  document.getElementById('role-ref').classList.remove('selected');
   document.getElementById('role-scorer').classList.remove('selected');
   document.getElementById('hp-zelle-other-field').style.display='none';
   document.getElementById('hp-new-ref-error').textContent='';
@@ -2016,6 +2154,7 @@ async function hpCreateRef(){
   const zelleOther=document.getElementById('hp-zelle-other-val').value.trim();
   const errEl=document.getElementById('hp-new-ref-error');
   if(!first||!last){errEl.textContent='First and last name are required.';return;}
+  if(_hpRoles.size===0){errEl.textContent='Please select at least one role — Referee or Scorekeeper.';return;}
   if(!/^\d{3}$/.test(pin)){errEl.textContent='PIN must be exactly 3 digits.';return;}
   const fullName=first+' '+last;
   // Check duplicate
