@@ -747,10 +747,11 @@ function checkPin(){
     sel.disabled=true;
     document.getElementById('commBtn').classList.add('active');
     document.getElementById('commBar').classList.add('show');
+    // Show comm-only tabs FIRST before switching to one
     document.querySelectorAll('.comm-only').forEach(el=>el.style.display='');
     updatePendingBadge();
-    // Always land on Pending tab when commissioner logs in
-    switchTab('pending');
+    // Now switch to Pending tab
+    setTimeout(()=>switchTab('pending'),50);
   }else{document.getElementById('pinError').textContent='Incorrect PIN.';document.getElementById('pinInput').value='';document.getElementById('pinInput').focus();}
 }
 function lockComm(){
@@ -758,8 +759,11 @@ function lockComm(){
   document.getElementById('comm-impersonate-bar').style.display='none';
   document.getElementById('commBtn').classList.remove('active');
   document.getElementById('commBar').classList.remove('show');
+  // Fully restore the official bar so refs can select their name
+  const officialBar=document.getElementById('officialSelect').closest('.official-bar');
+  officialBar.style.opacity='1';
+  officialBar.style.pointerEvents='';
   const sel=document.getElementById('officialSelect');
-  sel.closest('.official-bar').style.opacity='1';
   sel.disabled=false;
   // Restore last ref selection
   const lastOff=localStorage.getItem('idhf-last-official');
