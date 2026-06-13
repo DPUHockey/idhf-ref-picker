@@ -117,6 +117,7 @@
   .my-game-row{display:flex;flex-direction:column;padding:12px 14px;border-bottom:1px solid #f0dde0;gap:4px;}
   .my-game-row:last-child{border-bottom:none;}
   .my-game-row.today-game{background:#fff0f2;border-left:4px solid var(--maroon);}
+  .my-game-row.done-game{background:#f0faf0;border-left:4px solid #1a7a3c;}
   .my-game-row-top{display:flex;align-items:center;gap:7px;flex-wrap:nowrap;}
   .my-game-date{font-size:12px;font-weight:700;color:var(--dark);white-space:nowrap;flex-shrink:0;}
   .my-game-time{font-size:12px;color:var(--maroon);font-weight:700;white-space:nowrap;flex-shrink:0;}
@@ -935,18 +936,45 @@ function renderMyGames(){
     const isToday=g.date===ts,isPastGame=isPast(g.date),ll=g.league.toUpperCase();
     const[y,m,d]=g.date.split('-').map(Number),dt=new Date(y,m-1,d),ds=DAYS[dt.getDay()]+' '+MS[m-1]+' '+d;
     const key=gameKey(g.league,g),sk=encodeURIComponent(key);
-    html+='<div class="my-game-row'+(isToday?' today-game':'')+'"><div class="my-game-row-top">';
+    const done=completedOverrides[key]===true;
+
+    // Work out if pay button should be active: 1hr after game start
+    const timeStr=g.time; // e.g. "7:00PM"
+    const tmatch=timeStr.match(/(\d+):(\d+)(AM|PM)/i);
+    let payUnlocked=false,payTime='';
+    if(tmatch){
+      let hr=parseInt(tmatch[1]),mn=parseInt(tmatch[2]),ap=tmatch[3].toUpperCase();
+      if(ap==='PM'&&hr!==12)hr+=12;if(ap==='AM'&&hr===12)hr=0;
+      const gameStart=new Date(y,m-1,d,hr,mn,0);
+      const payAt=new Date(gameStart.getTime()+60*60*1000);
+      payUnlocked=Date.now()>=payAt.getTime();
+      payTime=((hr+1)%24)+':'+String(mn).padStart(2,'0')+(((hr+1)%24)>=12?'PM':'AM');
+    }
+
+    html+='<div class="my-game-row'+(isToday?' today-game':'')+(done?' done-game':'')+'"><div class="my-game-row-top">';
     if(isToday)html+='<span class="today-badge">TODAY</span>';
+    if(done)html+='<span class="today-badge" style="background:#1a7a3c;">✓ PAID</span>';
     html+='<span class="my-game-date">'+ds+'</span><span style="color:var(--muted);font-size:11px;">·</span><span class="my-game-time">'+g.time+'</span><span class="my-game-league'+(g.league==='fhl'?' fhl':'')+'">'+ll+'</span></div>';
     html+='<div class="my-game-matchup">'+g.away+' vs '+g.home+'</div>';
     const hasCancelled=cancellations[key]&&cancellations[key].refName===official&&cancellations[key].seen===false;
-    html+='<div class="my-game-row-bot"><span class="my-game-arena">Inwood Ice Arena</span>';
+    html+='<div class="my-game-row-bot"><span class="my-game-arena">Inwood Ice Arena</span><div style="display:flex;gap:6px;align-items:center;">';
     if(hasCancelled){
       html+='<span style="font-size:11px;font-weight:700;color:#e08800;background:#fff8e6;border:1px solid #f0d080;border-radius:4px;padding:4px 8px;white-space:nowrap;">⏳ Cancellation pending</span>';
-    }else if(!isPastGame){
+    } else if(!isPastGame&&!done){
       html+='<button class="cancel-game-btn" data-cancel-key="'+sk+'">✖ Cancel</button>';
     }
-    html+='</div></div>';
+    // Pay me button — shown always, greyed out until 1hr after start
+    if(!done){
+      if(payUnlocked){
+        html+='<button class="comm-pick-btn" style="background:#1a7a3c;color:#fff;border-color:#1a7a3c;font-size:11px;" onclick="refMarkDone(\''+sk+'\')">💵 Pay Me</button>';
+      } else {
+        const tooltip=isPastGame?'Unlocks 1hr after game start':'Game not started yet';
+        html+='<button disabled title="'+tooltip+'" style="font-size:11px;font-weight:700;color:#bbb;background:#f5f5f5;border:1px solid #ddd;border-radius:4px;padding:5px 10px;cursor:not-allowed;white-space:nowrap;">💵 Pay Me</button>';
+      }
+    } else {
+      html+='<button class="override-btn" onclick="refMarkUndone(\''+sk+'\')">↺ Undo</button>';
+    }
+    html+='</div></div></div>';
   });
   document.getElementById('mine-list').innerHTML=html;
   document.getElementById('mine-list').addEventListener('click',function(e){const btn=e.target.closest('[data-cancel-key]');if(btn)openCancelGame(btn.dataset.cancelKey);},{once:true});
