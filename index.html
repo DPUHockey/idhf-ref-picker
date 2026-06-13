@@ -1003,7 +1003,7 @@ function renderDoneGames(){
       const key=gameKey(g.league,g),refName=approved[key],done=completedOverrides[key]===true;
       const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
       const sk=encodeURIComponent(key);
-      html+='<div class="my-game-row" style="background:'+(done?'#f0faf0':'#fff')+';border-left:4px solid '+(done?'#1a7a3c':'var(--border))+'">';
+      html+='<div class="my-game-row" style="background:'+(done?'#f0faf0':'#fff')+';border-left:4px solid '+(done?'#1a7a3c':'var(--border)')+'">';
       html+='<div class="my-game-row-top"><span class="my-game-date">'+ds+'</span><span style="color:var(--muted);font-size:11px;">·</span><span class="my-game-time">'+g.time+'</span><span class="my-game-league'+(g.league==='fhl'?' fhl':'')+'">'+g.league.toUpperCase()+'</span></div>';
       html+='<div class="my-game-matchup">'+g.away+' vs '+g.home+'</div>';
       html+='<div class="my-game-row-bot"><span style="font-size:12px;color:var(--muted);">Ref: '+refName+'</span>';
@@ -1025,7 +1025,7 @@ function renderDoneGames(){
     const key=gameKey(g.league,g),done=completedOverrides[key]===true;
     const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
     const sk=encodeURIComponent(key);
-    html+='<div class="my-game-row" style="background:'+(done?'#f0faf0':'#fff')+';border-left:4px solid '+(done?'#1a7a3c':'var(--border))+'">';
+    html+='<div class="my-game-row" style="background:'+(done?'#f0faf0':'#fff')+';border-left:4px solid '+(done?'#1a7a3c':'var(--border)')+'">';
     html+='<div class="my-game-row-top"><span class="my-game-date">'+ds+'</span><span style="color:var(--muted);font-size:11px;">·</span><span class="my-game-time">'+g.time+'</span><span class="my-game-league'+(g.league==='fhl'?' fhl':'')+'">'+g.league.toUpperCase()+'</span></div>';
     html+='<div class="my-game-matchup">'+g.away+' vs '+g.home+'</div>';
     html+='<div class="my-game-row-bot"><span style="font-size:12px;color:'+(done?'#1a7a3c':'var(--muted)')+';">'+(done?'✓ Completed — $'+PAY_RATE+' earned':'Tap to confirm you worked this game')+'</span>';
