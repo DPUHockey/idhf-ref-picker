@@ -509,6 +509,14 @@
       <input class="home-input" id="hp-zelle-other-val" type="text" placeholder="Zelle email or number">
     </div>
     <div class="home-field"><label>Pick a 3-digit PIN</label><input class="home-pin-input" id="hp-new-pin" type="tel" inputmode="numeric" maxlength="3" placeholder="• • •" autocomplete="off" style="font-size:22px;padding:12px;letter-spacing:8px;"></div>
+    <div class="home-field">
+      <label>I want to work as</label>
+      <div class="zelle-row">
+        <div class="zelle-opt selected" id="role-ref" onclick="hpToggleRole('ref')">🏒 Referee</div>
+        <div class="zelle-opt" id="role-scorer" onclick="hpToggleRole('scorer')">📋 Scorekeeper</div>
+      </div>
+      <div style="font-size:11px;color:#5a7a9a;margin-top:6px;">Select one or both</div>
+    </div>
     <div class="home-error" id="hp-new-ref-error"></div>
     <button class="home-btn" onclick="hpCreateRef()">Create Profile & Sign In</button>
   </div>
@@ -668,6 +676,7 @@
 const COMM_PIN = '1967';
 const DEFAULT_OFFICIALS = ['Larry Collins','Matt Kranz','Nick Krainik','Matt Cuda','Sam Manno','Eric Carlson'];
 const PAY_RATE = 65;
+const SCORER_RATE = 30;
 const FB_PATH = 'https://fhldraft67-default-rtdb.firebaseio.com/refpicker';
 
 function setSyncStatus(msg,color){const el=document.getElementById('sync-status');if(el){el.textContent=msg;el.style.color=color||'#7a9ab0';}}
@@ -681,8 +690,12 @@ function startPolling(){
     try{
       const data=await fbGet('state');
       if(data){availability=data.availability||{};approved=data.approved||{};localStorage.setItem('idhf-avail',JSON.stringify(availability));localStorage.setItem('idhf-approved',JSON.stringify(approved));}
+      const scData=await fbGet('stateScorer');
+      if(scData){availabilityScorer=scData.availabilityScorer||{};approvedScorer=scData.approvedScorer||{};localStorage.setItem('idhf-avail-sc',JSON.stringify(availabilityScorer));localStorage.setItem('idhf-approved-sc',JSON.stringify(approvedScorer));}
       const cData=await fbGet('completed');
       if(cData){completedOverrides=cData;localStorage.setItem('idhf-completed',JSON.stringify(completedOverrides));}
+      const cScData=await fbGet('completedScorer');
+      if(cScData){completedScorer=cScData;localStorage.setItem('idhf-completed-sc',JSON.stringify(completedScorer));}
       const cancelData=await fbGet('cancellations');
       if(cancelData){
         // Strip out any already-acknowledged (seen:true) entries
@@ -778,6 +791,10 @@ let activeLeague='ihl',commMode=false,calYear=new Date().getFullYear(),calMonth=
 let availability=JSON.parse(localStorage.getItem('idhf-avail')||'{}');
 let approved=JSON.parse(localStorage.getItem('idhf-approved')||'{}');
 let completedOverrides=JSON.parse(localStorage.getItem('idhf-completed')||'{}');
+// Scorer parallel structures
+let availabilityScorer=JSON.parse(localStorage.getItem('idhf-avail-sc')||'{}');
+let approvedScorer=JSON.parse(localStorage.getItem('idhf-approved-sc')||'{}');
+let completedScorer=JSON.parse(localStorage.getItem('idhf-completed-sc')||'{}');
 let officials=JSON.parse(localStorage.getItem('idhf-officials')||'null')||[...DEFAULT_OFFICIALS];
 let profiles=JSON.parse(localStorage.getItem('idhf-profiles')||'{}');
 let payments=JSON.parse(localStorage.getItem('idhf-payments')||'{}');
@@ -791,13 +808,21 @@ let _profileUnlocked=null,_pendingDeleteRef=null,_pendingPayoutRef=null,_pending
 let archived=JSON.parse(localStorage.getItem('idhf-archived')||'{}');
 
 function saveOverrides(){localStorage.setItem('idhf-completed',JSON.stringify(completedOverrides));fbSet('completed',completedOverrides).catch(e=>console.warn(e));}
+function saveScorerOverrides(){localStorage.setItem('idhf-completed-sc',JSON.stringify(completedScorer));fbSet('completedScorer',completedScorer).catch(e=>console.warn(e));}
 async function saveAll(){
   localStorage.setItem('idhf-avail',JSON.stringify(availability));
   localStorage.setItem('idhf-approved',JSON.stringify(approved));
+  localStorage.setItem('idhf-avail-sc',JSON.stringify(availabilityScorer));
+  localStorage.setItem('idhf-approved-sc',JSON.stringify(approvedScorer));
   updateMineBadge();updateCommPendingAlert();
   setSyncStatus('Saving…','#c8a840');
-  try{await fbSet('state',{availability,approved});setSyncStatus('✓ Synced','#5a9a5a');setTimeout(()=>setSyncStatus('● Live','#5a9a5a'),2000);}
-  catch(e){setSyncStatus('⚠ Local','#c8a840');}
+  try{
+    await Promise.all([
+      fbSet('state',{availability,approved}),
+      fbSet('stateScorer',{availabilityScorer,approvedScorer})
+    ]);
+    setSyncStatus('✓ Synced','#5a9a5a');setTimeout(()=>setSyncStatus('● Live','#5a9a5a'),2000);
+  }catch(e){setSyncStatus('⚠ Local','#c8a840');}
 }
 async function saveOfficials(){localStorage.setItem('idhf-officials',JSON.stringify(officials));try{await fbSet('officials',{list:officials});}catch(e){}}
 async function saveProfiles(){localStorage.setItem('idhf-profiles',JSON.stringify(profiles));try{await fbSet('profiles',profiles);}catch(e){}}
@@ -815,6 +840,7 @@ function isPast(iso){const[y,m,d]=iso.split('-').map(Number);const t=new Date();
 function upcomingOnly(games){return games.filter(g=>!isPast(g.date));}
 function todayStr(){const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');}
 function isGameComplete(g){const k=gameKey(g.league,g);return completedOverrides[k]===true;}
+function isScorerComplete(g){const k=gameKey(g.league,g);return completedScorer[k]===true;}
 function getRefPayments(name){return payments[name]||[];}
 function getRefTotalPaid(name){return getRefPayments(name).reduce((s,p)=>s+(p.amount||0),0);}
 function allGames(){return[...IHL.map(g=>Object.assign({},g,{league:'ihl'})),...FHL.map(g=>Object.assign({},g,{league:'fhl'}))]}
@@ -838,6 +864,8 @@ document.getElementById('newOfficialName').addEventListener('keydown',e=>{if(e.k
 
 function render(){
   const games=activeLeague==='ihl'?IHL:FHL,upcoming=upcomingOnly(games),official=selectedOfficial();
+  const roles=official&&profiles[official]&&profiles[official].roles?profiles[official].roles:['ref'];
+  const isRef=roles.includes('ref'),isScorer=roles.includes('scorer');
   document.getElementById('badge-ihl').textContent=upcomingOnly(IHL).length;
   document.getElementById('badge-fhl').textContent=upcomingOnly(FHL).length;
   document.getElementById('panel-title').textContent=activeLeague==='ihl'?'IHL · Division 1':'FHL';
@@ -848,32 +876,75 @@ function render(){
   Object.entries(byDate).forEach(([date,dayGames])=>{
     html+='<div class="date-header">'+formatDateHeader(date)+'</div>';
     dayGames.forEach(g=>{
-      const key=gameKey(activeLeague,g),avail=availability[key]||[],appName=approved[key]||null;
-      const isApproved=!!appName,isMine=isApproved&&official&&appName===official,iAmAvail=official&&avail.includes(official);
-      const po=g.gt==='PO',needsRef=!!needsReplacement[key]&&!isApproved;
-      const rowClass=isMine?'my-game':(isApproved?'approved-row':(needsRef?'needs-ref':(avail.length?'has-availability':'')));
-      let availHtml='';
+      const key=gameKey(activeLeague,g),po=g.gt==='PO';
+      // REF slot
+      const avail=availability[key]||[],appName=approved[key]||null;
+      const isApproved=!!appName,isMineRef=isApproved&&official&&appName===official,iAmAvailRef=official&&avail.includes(official);
+      const needsRef=!!needsReplacement[key]&&!isApproved;
+      // SCORER slot
+      const availSc=availabilityScorer[key]||[],appScorer=approvedScorer[key]||null;
+      const isScorerApproved=!!appScorer,isMineScorer=isScorerApproved&&official&&appScorer===official,iAmAvailScorer=official&&availSc.includes(official);
+      // Row style
+      const isMine=(isMineRef||isMineScorer);
+      const rowClass=isMine?'my-game':(isApproved?'approved-row':(needsRef?'needs-ref':(avail.length||availSc.length?'has-availability':'')));
+      html+='<div class="game-row '+rowClass+'"><div class="game-time">'+g.time+'</div><div class="game-info">';
+      html+='<div class="game-matchup">'+g.away+' vs '+g.home+(po?'<span class="playoff-tag">PLAYOFF</span>':'')+(needsRef?'<span class="needs-ref-tag">🔴 Needs Ref!</span>':'')+'</div>';
+      html+='<div class="game-meta">Inwood Ice Arena</div>';
+
+      // ── REF SLOT ──
+      html+='<div style="margin-top:8px;">';
+      html+='<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;">🏒 Referee ($'+PAY_RATE+')</div>';
       if(avail.length){
-        availHtml='<div class="avail-list">';
+        html+='<div class="avail-list">';
         avail.forEach(name=>{
           const isChosen=appName===name,sk=encodeURIComponent(key),sn=encodeURIComponent(name);
-          availHtml+='<div class="avail-item">';
-          if(isChosen)availHtml+='<span class="assigned-star">★</span>';
-          availHtml+='<span class="avail-name'+(isChosen?' is-assigned':'')+'">'+name+'</span>';
-          if(commMode&&!isChosen&&(po?(avail.filter(n=>approved[key]===n).length<2):!isApproved))availHtml+='<button class="comm-pick-btn" data-key="'+sk+'" data-name="'+sn+'" onclick="approveRef(this)">Assign</button>';
-          if(commMode&&isChosen)availHtml+='<button class="comm-undo-btn" data-key="'+sk+'" onclick="unapproveRef(this)">↺ Undo</button>';
-          if(!isApproved&&!commMode&&name===official)availHtml+='<button class="avail-remove-btn" data-key="'+sk+'" data-name="'+sn+'" onclick="removeAvail(event,this)">✕</button>';
-          availHtml+='</div>';
+          html+='<div class="avail-item">';
+          if(isChosen)html+='<span class="assigned-star">★</span>';
+          html+='<span class="avail-name'+(isChosen?' is-assigned':'')+'">'+name+'</span>';
+          if(commMode&&!isChosen&&(po?(avail.filter(n=>approved[key]===n).length<2):!isApproved))html+='<button class="comm-pick-btn" data-key="'+encodeURIComponent(key)+'" data-name="'+encodeURIComponent(name)+'" onclick="approveRef(this)">Assign Ref</button>';
+          if(commMode&&isChosen)html+='<button class="comm-undo-btn" data-key="'+encodeURIComponent(key)+'" onclick="unapproveRef(this)">↺</button>';
+          if(!isApproved&&!commMode&&name===official)html+='<button class="avail-remove-btn" data-key="'+encodeURIComponent(key)+'" data-name="'+encodeURIComponent(name)+'" onclick="removeAvail(event,this)">✕</button>';
+          html+='</div>';
         });
-        availHtml+='</div>';
+        html+='</div>';
+      } else if(isApproved){
+        html+='<div class="avail-item"><span class="assigned-star">★</span><span class="avail-name is-assigned">'+appName+'</span>'+(commMode?'<button class="comm-undo-btn" data-key="'+encodeURIComponent(key)+'" onclick="unapproveRef(this)">↺</button>':'')+'</div>';
       }
-      let actionHtml='';
-      const maxRefs=po?2:1;
-      if(isMine)actionHtml='<span class="got-it-badge">🎉 You got it!</span>';
-      else if(isApproved&&!isMine)actionHtml='<span class="assigned-label">✓ '+appName+'</span>';
-      else if(official&&!iAmAvail)actionHtml='<button class="mark-avail-btn" data-key="'+encodeURIComponent(key)+'" onclick="markAvail(this)">I\'m Available</button>';
-      else if(iAmAvail)actionHtml='<span class="already-avail">✓ Available</span>';
-      html+='<div class="game-row '+rowClass+'"><div class="game-time">'+g.time+'</div><div class="game-info"><div class="game-matchup">'+g.away+' vs '+g.home+(po?'<span class="playoff-tag">PLAYOFF</span>':'')+(needsRef?'<span class="needs-ref-tag">🔴 Needs Ref!</span>':'')+'</div><div class="game-meta">Inwood Ice Arena</div>'+availHtml+'</div><div class="game-action">'+actionHtml+'</div></div>';
+      // Ref action button
+      if(!commMode){
+        if(isMineRef)html+='<span class="got-it-badge" style="font-size:11px;margin-top:4px;display:inline-block;">🎉 You\'re the Ref!</span>';
+        else if(isRef&&!iAmAvailRef&&!isApproved)html+='<button class="mark-avail-btn" style="margin-top:4px;font-size:11px;" data-key="'+encodeURIComponent(key)+'" onclick="markAvail(this)">I\'ll Ref</button>';
+        else if(iAmAvailRef&&!isApproved)html+='<span class="already-avail">✓ Available to Ref</span>';
+      }
+      html+='</div>';
+
+      // ── SCORER SLOT ──
+      html+='<div style="margin-top:8px;padding-top:8px;border-top:1px solid #eef1f8;">';
+      html+='<div style="font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:4px;">📋 Scorekeeper ($'+SCORER_RATE+')</div>';
+      if(availSc.length){
+        html+='<div class="avail-list">';
+        availSc.forEach(name=>{
+          const isChosen=appScorer===name,sk=encodeURIComponent(key),sn=encodeURIComponent(name);
+          html+='<div class="avail-item">';
+          if(isChosen)html+='<span class="assigned-star" style="color:#1a7a3c;">★</span>';
+          html+='<span class="avail-name'+(isChosen?' is-assigned':'')+'">'+name+'</span>';
+          if(commMode&&!isChosen&&!isScorerApproved)html+='<button class="comm-pick-btn" data-key="'+sk+'" data-name="'+sn+'" onclick="approveScorer(this)">Assign Scorer</button>';
+          if(commMode&&isChosen)html+='<button class="comm-undo-btn" data-key="'+sk+'" onclick="unapproveScorer(this)">↺</button>';
+          if(!isScorerApproved&&!commMode&&name===official)html+='<button class="avail-remove-btn" data-key="'+sk+'" data-name="'+sn+'" onclick="removeScorerAvail(event,this)">✕</button>';
+          html+='</div>';
+        });
+        html+='</div>';
+      } else if(isScorerApproved){
+        html+='<div class="avail-item"><span class="assigned-star" style="color:#1a7a3c;">★</span><span class="avail-name is-assigned">'+appScorer+'</span>'+(commMode?'<button class="comm-undo-btn" data-key="'+encodeURIComponent(key)+'" onclick="unapproveScorer(this)">↺</button>':'')+'</div>';
+      }
+      if(!commMode){
+        if(isMineScorer)html+='<span class="got-it-badge" style="font-size:11px;margin-top:4px;display:inline-block;background:#1a7a3c;">📋 You\'re Scoring!</span>';
+        else if(isScorer&&!iAmAvailScorer&&!isScorerApproved)html+='<button class="mark-avail-btn" style="margin-top:4px;font-size:11px;background:#1a5a3a;" data-key="'+encodeURIComponent(key)+'" onclick="markScorerAvail(this)">I\'ll Score</button>';
+        else if(iAmAvailScorer&&!isScorerApproved)html+='<span class="already-avail" style="color:#1a7a3c;">✓ Available to Score</span>';
+      }
+      html+='</div>';
+
+      html+='</div></div>';// close game-info, game-row
     });
   });
   document.getElementById('games-list').innerHTML=html;
@@ -881,6 +952,10 @@ function render(){
 
 function markAvail(el){const key=decodeURIComponent(el.dataset.key),name=selectedOfficial();if(!name){showBanner('Select your name first');return;}if(approved[key]){showBanner('Game already assigned');return;}if(!availability[key])availability[key]=[];if(!availability[key].includes(name))availability[key].push(name);saveAll();render();}
 function removeAvail(e,el){e.stopPropagation();const key=decodeURIComponent(el.dataset.key),name=decodeURIComponent(el.dataset.name);if(!availability[key])return;availability[key]=availability[key].filter(n=>n!==name);if(!availability[key].length)delete availability[key];saveAll();render();}
+function markScorerAvail(el){const key=decodeURIComponent(el.dataset.key),name=selectedOfficial();if(!name){showBanner('Select your name first');return;}if(approvedScorer[key]){showBanner('Scorer already assigned');return;}if(!availabilityScorer[key])availabilityScorer[key]=[];if(!availabilityScorer[key].includes(name))availabilityScorer[key].push(name);saveAll();render();}
+function removeScorerAvail(e,el){e.stopPropagation();const key=decodeURIComponent(el.dataset.key),name=decodeURIComponent(el.dataset.name);if(!availabilityScorer[key])return;availabilityScorer[key]=availabilityScorer[key].filter(n=>n!==name);if(!availabilityScorer[key].length)delete availabilityScorer[key];saveAll();render();}
+function approveScorer(el){const key=decodeURIComponent(el.dataset.key),name=decodeURIComponent(el.dataset.name);approvedScorer[key]=name;saveAll();render();showBanner(name+' assigned as Scorer');}
+function unapproveScorer(el){const key=decodeURIComponent(el.dataset.key);delete approvedScorer[key];saveAll();render();showBanner('Scorer assignment undone');}
 function approveRef(el){
   const key=decodeURIComponent(el.dataset.key),name=decodeURIComponent(el.dataset.name);
   approved[key]=name;
@@ -951,6 +1026,10 @@ function lockComm(){
 function openReset(){document.getElementById('resetModal').classList.add('show');}
 async function confirmReset(){
   availability={};approved={};completedOverrides={};cancellations={};needsReplacement={};
+  availabilityScorer={};approvedScorer={};completedScorer={};
+  localStorage.setItem('idhf-avail-sc',JSON.stringify(availabilityScorer));
+  localStorage.setItem('idhf-approved-sc',JSON.stringify(approvedScorer));
+  localStorage.setItem('idhf-completed-sc',JSON.stringify(completedScorer));
   localStorage.setItem('idhf-avail',JSON.stringify(availability));
   localStorage.setItem('idhf-approved',JSON.stringify(approved));
   localStorage.setItem('idhf-completed',JSON.stringify(completedOverrides));
@@ -963,7 +1042,9 @@ async function confirmReset(){
   const bfhl=document.getElementById('badge-fhl');if(bfhl)bfhl.textContent='0';
   await Promise.all([
     fbSet('state',{availability,approved}),
+    fbSet('stateScorer',{availabilityScorer,approvedScorer}),
     fbSet('completed',completedOverrides),
+    fbSet('completedScorer',completedScorer),
     fbSet('cancellations',cancellations),
     fbSet('needsReplacement',needsReplacement)
   ]).catch(e=>console.warn(e));
@@ -1051,56 +1132,60 @@ function renderMyGames(){
     return;
   }
 
-  // REF MODE — show their assigned games
+  // REF MODE — show their assigned games (ref + scorer)
   const official=selectedOfficial(),ag=allGames();
-  const myGames=ag.filter(g=>approved[gameKey(g.league,g)]===official).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:a.time<b.time?-1:1);
-  document.getElementById('badge-mine').textContent=myGames.length||'';
+  const myRefGames=ag.filter(g=>approved[gameKey(g.league,g)]===official);
+  const myScorerGames=ag.filter(g=>approvedScorer[gameKey(g.league,g)]===official&&approved[gameKey(g.league,g)]!==official);
+  // Merge: tag each game with role
+  const myGames=[
+    ...myRefGames.map(g=>({...g,myRole:'ref'})),
+    ...myScorerGames.map(g=>({...g,myRole:'scorer'}))
+  ].sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:a.time<b.time?-1:1);
+  const badge=document.getElementById('badge-mine');
+  if(badge){badge.textContent=myGames.length||'';badge.style.display=myGames.length?'':'none';}
   const ts=todayStr();
-  if(!official){document.getElementById('mine-list').innerHTML='<div class="no-games-msg">Select your name to see your assigned games.</div>';document.getElementById('mine-title').textContent='Pending';return;}
+  if(!official){document.getElementById('mine-list').innerHTML='<div class="no-games-msg">Select your name to see your assigned games.</div>';document.getElementById('mine-title').textContent='My Games';return;}
   document.getElementById('mine-title').textContent=official+"'s Games";
   if(!myGames.length){document.getElementById('mine-list').innerHTML='<div class="no-games-msg">No assigned games yet.<br><span style="font-size:12px">Mark availability on the IHL and FHL tabs.</span></div>';return;}
   let html='';
   myGames.forEach(g=>{
-    const isToday=g.date===ts,isPastGame=isPast(g.date),ll=g.league.toUpperCase();
+    const isRef=g.myRole==='ref',isToday=g.date===ts,isPastGame=isPast(g.date),ll=g.league.toUpperCase();
     const[y,m,d]=g.date.split('-').map(Number),dt=new Date(y,m-1,d),ds=DAYS[dt.getDay()]+' '+MS[m-1]+' '+d;
     const key=gameKey(g.league,g),sk=encodeURIComponent(key);
-    const done=completedOverrides[key]===true;
+    const done=isRef?completedOverrides[key]===true:completedScorer[key]===true;
+    const rate=isRef?PAY_RATE:SCORER_RATE;
+    const roleTag=isRef?'🏒 Ref':'📋 Scorer';
+    const roleColor=isRef?'var(--maroon)':'#1a5a3a';
 
-    // Work out if pay button should be active: 1hr after game start
-    const timeStr=g.time; // e.g. "7:00PM"
-    const tmatch=timeStr.match(/(\d+):(\d+)(AM|PM)/i);
-    let payUnlocked=false,payTime='';
-    if(tmatch){
-      let hr=parseInt(tmatch[1]),mn=parseInt(tmatch[2]),ap=tmatch[3].toUpperCase();
-      if(ap==='PM'&&hr!==12)hr+=12;if(ap==='AM'&&hr===12)hr=0;
-      const gameStart=new Date(y,m-1,d,hr,mn,0);
-      const payAt=new Date(gameStart.getTime()+60*60*1000);
-      payUnlocked=Date.now()>=payAt.getTime();
-      payTime=((hr+1)%24)+':'+String(mn).padStart(2,'0')+(((hr+1)%24)>=12?'PM':'AM');
-    }
+    // Pay unlock logic
+    const tmatch=g.time.match(/(\d+):(\d+)(AM|PM)/i);
+    let payUnlocked=false;
+    if(tmatch){let hr=parseInt(tmatch[1]),mn=parseInt(tmatch[2]),ap=tmatch[3].toUpperCase();if(ap==='PM'&&hr!==12)hr+=12;if(ap==='AM'&&hr===12)hr=0;payUnlocked=Date.now()>=new Date(y,m-1,d,hr,mn,0).getTime()+3600000;}
 
     html+='<div class="my-game-row'+(isToday?' today-game':'')+(done?' done-game':'')+'"><div class="my-game-row-top">';
     if(isToday)html+='<span class="today-badge">TODAY</span>';
     if(done)html+='<span class="today-badge" style="background:#1a7a3c;">✓ PAID</span>';
-    html+='<span class="my-game-date">'+ds+'</span><span style="color:var(--muted);font-size:11px;">·</span><span class="my-game-time">'+g.time+'</span><span class="my-game-league'+(g.league==='fhl'?' fhl':'')+'">'+ll+'</span></div>';
+    html+='<span class="my-game-date">'+ds+'</span><span style="color:var(--muted);font-size:11px;">·</span><span class="my-game-time">'+g.time+'</span>';
+    html+='<span class="my-game-league'+(g.league==='fhl'?' fhl':'')+'" style="background:'+roleColor+';">'+ll+'</span>';
+    html+='<span style="font-size:9px;font-weight:700;background:'+roleColor+';color:#fff;border-radius:3px;padding:2px 5px;">'+roleTag+'</span></div>';
     html+='<div class="my-game-matchup">'+g.away+' vs '+g.home+'</div>';
-    const hasCancelled=cancellations[key]&&cancellations[key].refName===official&&cancellations[key].seen===false;
-    html+='<div class="my-game-row-bot"><span class="my-game-arena">Inwood Ice Arena</span><div style="display:flex;gap:6px;align-items:center;">';
+    const hasCancelled=isRef&&cancellations[key]&&cancellations[key].refName===official&&cancellations[key].seen===false;
+    html+='<div class="my-game-row-bot"><span class="my-game-arena">$'+rate+' · Inwood Ice Arena</span><div style="display:flex;gap:6px;align-items:center;">';
     if(hasCancelled){
       html+='<span style="font-size:11px;font-weight:700;color:#e08800;background:#fff8e6;border:1px solid #f0d080;border-radius:4px;padding:4px 8px;white-space:nowrap;">⏳ Cancellation pending</span>';
-    } else if(!isPastGame&&!done){
+    } else if(!isPastGame&&!done&&isRef){
       html+='<button class="cancel-game-btn" data-cancel-key="'+sk+'">✖ Cancel</button>';
     }
-    // Pay me button — shown always, greyed out until 1hr after start
     if(!done){
       if(payUnlocked){
-        html+='<button class="comm-pick-btn" style="background:#1a7a3c;color:#fff;border-color:#1a7a3c;font-size:11px;" onclick="refMarkDone(\''+sk+'\')">💵 Pay Me</button>';
+        const fn=isRef?'refMarkDone':'scorerMarkDone';
+        html+='<button class="comm-pick-btn" style="background:#1a7a3c;color:#fff;border-color:#1a7a3c;font-size:11px;" onclick="'+fn+'(\''+sk+'\')">💵 Pay Me $'+rate+'</button>';
       } else {
-        const tooltip=isPastGame?'Unlocks 1hr after game start':'Game not started yet';
-        html+='<button disabled title="'+tooltip+'" style="font-size:11px;font-weight:700;color:#bbb;background:#f5f5f5;border:1px solid #ddd;border-radius:4px;padding:5px 10px;cursor:not-allowed;white-space:nowrap;">💵 Pay Me</button>';
+        html+='<button disabled style="font-size:11px;font-weight:700;color:#bbb;background:#f5f5f5;border:1px solid #ddd;border-radius:4px;padding:5px 10px;cursor:not-allowed;">💵 Pay Me $'+rate+'</button>';
       }
     } else {
-      html+='<button class="override-btn" onclick="refMarkUndone(\''+sk+'\')">↺ Undo</button>';
+      const fn=isRef?'refMarkUndone':'scorerMarkUndone';
+      html+='<button class="override-btn" onclick="'+fn+'(\''+sk+'\')">↺ Undo</button>';
     }
     html+='</div></div></div>';
   });
@@ -1109,6 +1194,7 @@ function renderMyGames(){
 }
 
 function updateMineBadge(){
+  updateMineTabLabel();
   const badge=document.getElementById('badge-mine');
   if(!badge)return;
   if(commMode){
@@ -1131,12 +1217,10 @@ function updateMineBadge(){
 function updateDoneBadge(){
   const badge=document.getElementById('badge-done');if(!badge)return;
   const official=selectedOfficial();if(!official||commMode){badge.style.display='none';return;}
-  // Past assigned games not yet marked complete by this ref
   const ag=allGames();
-  const pending=ag.filter(g=>{
-    const k=gameKey(g.league,g);
-    return approved[k]===official&&isPast(g.date)&&completedOverrides[k]!==true;
-  }).length;
+  const pendingRef=ag.filter(g=>{const k=gameKey(g.league,g);return approved[k]===official&&isPast(g.date)&&completedOverrides[k]!==true;}).length;
+  const pendingSc=ag.filter(g=>{const k=gameKey(g.league,g);return approvedScorer[k]===official&&isPast(g.date)&&completedScorer[k]!==true;}).length;
+  const pending=pendingRef+pendingSc;
   badge.textContent=pending;
   badge.style.display=pending>0?'':'none';
   if(pending>0)badge.classList.add('badge-cancel');else badge.classList.remove('badge-cancel');
@@ -1192,22 +1276,10 @@ function renderDoneGames(){
   el.innerHTML=html;
 }
 
-function refMarkDone(sk){
-  const key=decodeURIComponent(sk);
-  completedOverrides[key]=true;
-  saveOverrides();
-  updateDoneBadge();
-  renderDoneGames();
-  showBanner('✓ Game marked complete — $'+PAY_RATE+' added to your pay');
-}
-function refMarkUndone(sk){
-  const key=decodeURIComponent(sk);
-  delete completedOverrides[key];
-  saveOverrides();
-  updateDoneBadge();
-  renderDoneGames();
-  showBanner('Game unmarked');
-}
+function refMarkDone(sk){const key=decodeURIComponent(sk);completedOverrides[key]=true;saveOverrides();updateDoneBadge();renderMyGames();showBanner('✓ Game marked complete — $'+PAY_RATE+' added to your pay');}
+function refMarkUndone(sk){const key=decodeURIComponent(sk);delete completedOverrides[key];saveOverrides();updateDoneBadge();renderMyGames();showBanner('Game unmarked');}
+function scorerMarkDone(sk){const key=decodeURIComponent(sk);completedScorer[key]=true;saveScorerOverrides();updateDoneBadge();renderMyGames();showBanner('✓ Game marked complete — $'+SCORER_RATE+' added to your pay');}
+function scorerMarkUndone(sk){const key=decodeURIComponent(sk);delete completedScorer[key];saveScorerOverrides();updateDoneBadge();renderMyGames();showBanner('Game unmarked');}
 function toggleComplete(sk,done){
   const key=decodeURIComponent(sk);
   if(done)completedOverrides[key]=true;else delete completedOverrides[key];
@@ -1239,10 +1311,17 @@ function renderMyPay(){
   }
 
   const ag=allGames();
-  const myGames=ag.filter(g=>approved[gameKey(g.league,g)]===official);
-  const completed=myGames.filter(g=>isGameComplete(g));
-  const upcoming=myGames.filter(g=>!isPast(g.date));
-  const earned=completed.length*PAY_RATE;
+  // Ref games
+  const myRefGames=ag.filter(g=>approved[gameKey(g.league,g)]===official);
+  const completedRef=myRefGames.filter(g=>isGameComplete(g));
+  const upcomingRef=myRefGames.filter(g=>!isPast(g.date));
+  const earnedRef=completedRef.length*PAY_RATE;
+  // Scorer games
+  const myScorerGames=ag.filter(g=>approvedScorer[gameKey(g.league,g)]===official);
+  const completedSc=myScorerGames.filter(g=>isScorerComplete(g));
+  const upcomingSc=myScorerGames.filter(g=>!isPast(g.date));
+  const earnedSc=completedSc.length*SCORER_RATE;
+  const earned=earnedRef+earnedSc;
   const paid=getRefTotalPaid(official);
   const balance=earned-paid;
   const ts=todayStr();
@@ -1255,17 +1334,32 @@ function renderMyPay(){
     +'<div class="mypay-stat"><div class="msn" style="color:#1a7a3c;">$'+paid+'</div><div class="msl">Paid Out</div></div>'
     +'<div class="mypay-stat"><div class="msn" style="color:'+(balance>0?'var(--maroon)':balance<0?'#7a4000':'#1a7a3c')+';">$'+balance+'</div><div class="msl">Balance</div></div>'
     +'</div>';
+  if(earnedRef>0||earnedSc>0){
+    html+='<div style="padding:8px 16px;background:#f5f5ff;font-size:11px;color:var(--muted);display:flex;gap:16px;">';
+    if(earnedRef>0)html+='<span>🏒 Ref: $'+earnedRef+' ('+completedRef.length+' games @ $'+PAY_RATE+')</span>';
+    if(earnedSc>0)html+='<span>📋 Scorer: $'+earnedSc+' ('+completedSc.length+' games @ $'+SCORER_RATE+')</span>';
+    html+='</div>';
+  }
 
-  // Completed games
-  html+='<div class="pay-hist-section"><h4>Completed Games ($'+PAY_RATE+' each)</h4>';
-  if(!completed.length){html+='<div style="font-size:13px;color:var(--muted);padding:6px 0;">No completed games yet.</div>';}
-  else{completed.sort((a,b)=>a.date<b.date?-1:1).forEach(g=>{const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;html+='<div class="pay-game-row"><span>'+ds+' · '+g.time+' <span style="font-size:10px;background:'+(g.league==='ihl'?'#ddeeff':'#e6f4ec')+';color:'+(g.league==='ihl'?'#0a4a7a':'#1a7a3c')+';padding:1px 5px;border-radius:3px;">'+g.league.toUpperCase()+'</span></span><span style="font-weight:700;color:#1a7a3c;">+$'+PAY_RATE+'</span></div>';});}
-  html+='</div>';
+  // Completed ref games
+  if(completedRef.length){
+    html+='<div class="pay-hist-section"><h4>🏒 Ref Games Completed ($'+PAY_RATE+' each)</h4>';
+    completedRef.sort((a,b)=>a.date<b.date?-1:1).forEach(g=>{const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;html+='<div class="pay-game-row"><span>'+ds+' · '+g.time+' <span style="font-size:10px;background:'+(g.league==='ihl'?'#ddeeff':'#e6f4ec')+';color:'+(g.league==='ihl'?'#0a4a7a':'#1a7a3c')+';padding:1px 5px;border-radius:3px;">'+g.league.toUpperCase()+'</span></span><span style="font-weight:700;color:#1a7a3c;">+$'+PAY_RATE+'</span></div>';});
+    html+='</div>';
+  }
+  // Completed scorer games
+  if(completedSc.length){
+    html+='<div class="pay-hist-section"><h4>📋 Scorer Games Completed ($'+SCORER_RATE+' each)</h4>';
+    completedSc.sort((a,b)=>a.date<b.date?-1:1).forEach(g=>{const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;html+='<div class="pay-game-row"><span>'+ds+' · '+g.time+' <span style="font-size:10px;background:'+(g.league==='ihl'?'#ddeeff':'#e6f4ec')+';color:'+(g.league==='ihl'?'#0a4a7a':'#1a7a3c')+';padding:1px 5px;border-radius:3px;">'+g.league.toUpperCase()+'</span></span><span style="font-weight:700;color:#1a7a3c;">+$'+SCORER_RATE+'</span></div>';});
+    html+='</div>';
+  }
+  if(!completedRef.length&&!completedSc.length){html+='<div class="pay-hist-section"><div style="font-size:13px;color:var(--muted);padding:6px 0;">No completed games yet.</div></div>';}
 
   // Upcoming
-  if(upcoming.length){
+  const allUpcoming=[...upcomingRef.map(g=>({...g,role:'ref'})),...upcomingSc.map(g=>({...g,role:'scorer'}))].sort((a,b)=>a.date<b.date?-1:1);
+  if(allUpcoming.length){
     html+='<div class="pay-hist-section" style="border-top:1px solid var(--border);"><h4>Upcoming Games (pending)</h4>';
-    upcoming.sort((a,b)=>a.date<b.date?-1:1).forEach(g=>{const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;const isToday=g.date===ts;html+='<div class="pay-game-row"><span>'+(isToday?'📅 ':'')+''+ds+' · '+g.time+' <span style="font-size:10px;background:'+(g.league==='ihl'?'#ddeeff':'#e6f4ec')+';color:'+(g.league==='ihl'?'#0a4a7a':'#1a7a3c')+';padding:1px 5px;border-radius:3px;">'+g.league.toUpperCase()+'</span></span><span style="color:var(--muted);">$'+PAY_RATE+'</span></div>';});
+    allUpcoming.forEach(g=>{const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;const isToday=g.date===ts;const rate=g.role==='ref'?PAY_RATE:SCORER_RATE;const roleIcon=g.role==='ref'?'🏒':'📋';html+='<div class="pay-game-row"><span>'+(isToday?'📅 ':'')+roleIcon+' '+ds+' · '+g.time+' <span style="font-size:10px;background:'+(g.league==='ihl'?'#ddeeff':'#e6f4ec')+';color:'+(g.league==='ihl'?'#0a4a7a':'#1a7a3c')+';padding:1px 5px;border-radius:3px;">'+g.league.toUpperCase()+'</span></span><span style="color:var(--muted);">$'+rate+'</span></div>';});
     html+='</div>';
   }
 
@@ -1280,6 +1374,13 @@ function renderMyPay(){
 }
 
 // ── PENDING ───────────────────────────────────────────────────────────────
+function updateMineTabLabel(){
+  const btn=document.getElementById('tab-mine');
+  if(!btn)return;
+  const badge=document.getElementById('badge-mine');
+  const badgeHtml=badge?badge.outerHTML:'';
+  btn.innerHTML=(commMode?'⛳ Pending':'My Games')+' '+badgeHtml;
+}
 function updateCommPendingAlert(){
   if(!commMode)return;
   const ag=allGames();
@@ -1287,7 +1388,6 @@ function updateCommPendingAlert(){
   const palert=document.getElementById('comm-pending-alert');
   const pcount=document.getElementById('comm-pending-count');
   if(palert&&pcount){pcount.textContent=pending;palert.style.display=pending>0?'':'none';}
-  // Cancellation alert
   const cancels=Object.values(cancellations).filter(c=>c.seen===false).length;
   const calert=document.getElementById('comm-cancel-alert');
   const ccount=document.getElementById('comm-cancel-count');
@@ -1362,8 +1462,13 @@ function dismissCancellation(ek){
 // ── PAYROLL ───────────────────────────────────────────────────────────────
 function renderPayroll(){
   const ag=allGames(),refMap={};
-  ag.forEach(g=>{const key=gameKey(g.league,g),name=approved[key];if(!name)return;if(!refMap[name])refMap[name]={assigned:[],completed:[],earned:0};refMap[name].assigned.push(g);if(isGameComplete(g)){refMap[name].completed.push(g);refMap[name].earned+=PAY_RATE;}});
-  Object.keys(payments).forEach(name=>{if(!refMap[name]&&payments[name]&&payments[name].length)refMap[name]={assigned:[],completed:[],earned:0};});
+  ag.forEach(g=>{
+    const key=gameKey(g.league,g);
+    const rName=approved[key],sName=approvedScorer[key];
+    if(rName){if(!refMap[rName])refMap[rName]={assigned:[],completed:[],scorerAssigned:[],scorerCompleted:[],earned:0};refMap[rName].assigned.push(g);if(isGameComplete(g)){refMap[rName].completed.push(g);refMap[rName].earned+=PAY_RATE;}}
+    if(sName){if(!refMap[sName])refMap[sName]={assigned:[],completed:[],scorerAssigned:[],scorerCompleted:[],earned:0};refMap[sName].scorerAssigned.push(g);if(isScorerComplete(g)){refMap[sName].scorerCompleted.push(g);refMap[sName].earned+=SCORER_RATE;}}
+  });
+  Object.keys(payments).forEach(name=>{if(!refMap[name]&&payments[name]&&payments[name].length)refMap[name]={assigned:[],completed:[],scorerAssigned:[],scorerCompleted:[],earned:0};});
   const refs=Object.keys(refMap).sort(),totalEarned=refs.reduce((s,r)=>s+refMap[r].earned,0),totalPaid=refs.reduce((s,r)=>s+getRefTotalPaid(r),0),totalOwed=totalEarned-totalPaid;
   document.getElementById('pay-total-label').textContent='Owed: $'+Math.max(0,totalOwed).toLocaleString();
   if(!refs.length){document.getElementById('pay-list').innerHTML='<div class="no-games-msg">No assigned games yet.</div>';document.getElementById('pay-summary').textContent='';return;}
@@ -1372,8 +1477,12 @@ function renderPayroll(){
     const r=refMap[name],earned=r.earned,paid=getRefTotalPaid(name),balance=earned-paid;
     const balCls=balance>0?'pay-balance-owed':'pay-balance-clear',balTxt=balance>0?'−$'+balance.toLocaleString():(balance<0?'+$'+Math.abs(balance)+' over':'✓ Clear');
     const sn=encodeURIComponent(name);
-    html+='<tr><td style="font-weight:600;">'+name+'<br><div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;"><button class="pay-out-btn" onclick="openPayout(\''+sn+'\')">💵 Pay</button><button class="pay-out-btn" style="background:var(--maroon);" onclick="commEditProfile(\''+sn+'\')">✏️ Profile</button><button class="delete-ref-btn" onclick="openDeleteRef(\''+sn+'\')">🗑</button></div></td>';
-    html+='<td>'+r.completed.length+'/'+r.assigned.length+'</td>';
+    const breakdown=[];
+    if(r.completed.length)breakdown.push('🏒 '+r.completed.length+'×$'+PAY_RATE);
+    if(r.scorerCompleted&&r.scorerCompleted.length)breakdown.push('📋 '+r.scorerCompleted.length+'×$'+SCORER_RATE);
+    const doneStr=(r.completed.length+((r.scorerCompleted&&r.scorerCompleted.length)||0))+'/'+(r.assigned.length+((r.scorerAssigned&&r.scorerAssigned.length)||0));
+    html+='<tr><td style="font-weight:600;">'+name+(breakdown.length?'<div style="font-size:10px;color:var(--muted);margin-top:2px;">'+breakdown.join(' · ')+'</div>':'')+'<br><div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;"><button class="pay-out-btn" onclick="openPayout(\''+sn+'\')">💵 Pay</button><button class="pay-out-btn" style="background:var(--maroon);" onclick="commEditProfile(\''+sn+'\')">✏️ Profile</button><button class="delete-ref-btn" onclick="openDeleteRef(\''+sn+'\')">🗑</button></div></td>';
+    html+='<td>'+doneStr+'</td>';
     html+='<td class="'+(earned>0?'pay-due':'pay-zero')+'">'+(earned>0?'$'+earned:'—')+'</td>';
     html+='<td style="color:#1a7a3c;font-weight:'+(paid>0?'700':'400')+'">'+(paid>0?'$'+paid:'—')+'</td>';
     html+='<td class="'+balCls+'">'+balTxt+'</td><td></td></tr>';
@@ -1389,10 +1498,19 @@ function markIncomplete(sk){const key=decodeURIComponent(sk);completedOverrides[
 // ── PAYOUT ────────────────────────────────────────────────────────────────
 function openPayout(en){
   const name=decodeURIComponent(en);_pendingPayoutRef=name;
-  const ag=allGames();let earned=0;ag.forEach(g=>{if(approved[gameKey(g.league,g)]===name&&isGameComplete(g))earned+=PAY_RATE;});
+  const ag=allGames();
+  let earnedRef=0,earnedSc=0;
+  ag.forEach(g=>{
+    if(approved[gameKey(g.league,g)]===name&&isGameComplete(g))earnedRef+=PAY_RATE;
+    if(approvedScorer[gameKey(g.league,g)]===name&&isScorerComplete(g))earnedSc+=SCORER_RATE;
+  });
+  const earned=earnedRef+earnedSc;
   const paid=getRefTotalPaid(name),balance=earned-paid;
   document.getElementById('payoutRefName').textContent=name;
-  document.getElementById('payoutBalance').innerHTML='Earned: <strong>$'+earned+'</strong> | Paid: <strong style="color:#1a7a3c;">$'+paid+'</strong> | Balance: <strong style="color:'+(balance>0?'var(--maroon)':'#1a7a3c')+';">$'+balance+'</strong>';
+  const breakdown=[];
+  if(earnedRef)breakdown.push('🏒 $'+earnedRef+' ref');
+  if(earnedSc)breakdown.push('📋 $'+earnedSc+' scorer');
+  document.getElementById('payoutBalance').innerHTML='Earned: <strong>$'+earned+'</strong>'+(breakdown.length?' <span style="font-size:11px;color:var(--muted);">('+breakdown.join(' + ')+')</span>':'')+' | Paid: <strong style="color:#1a7a3c;">$'+paid+'</strong> | Balance: <strong style="color:'+(balance>0?'var(--maroon)':'#1a7a3c')+';">$'+balance+'</strong>';
   document.getElementById('payoutAmount').value=balance>0?balance:'';
   document.getElementById('payoutNote').value='';document.getElementById('payoutError').textContent='';
   const hist=getRefPayments(name);
@@ -1453,15 +1571,22 @@ async function confirmDeleteRef(){
   // Remove from active roster
   officials=officials.filter(n=>n!==name);
   saveOfficials();
-  // Scrub from all availability lists
+  // Scrub from all availability lists (ref + scorer)
   Object.keys(availability).forEach(key=>{
     if(availability[key]){
       availability[key]=availability[key].filter(n=>n!==name);
       if(!availability[key].length)delete availability[key];
     }
   });
-  // Scrub from approved assignments
+  Object.keys(availabilityScorer).forEach(key=>{
+    if(availabilityScorer[key]){
+      availabilityScorer[key]=availabilityScorer[key].filter(n=>n!==name);
+      if(!availabilityScorer[key].length)delete availabilityScorer[key];
+    }
+  });
+  // Scrub from approved assignments (ref + scorer)
   Object.keys(approved).forEach(key=>{if(approved[key]===name)delete approved[key];});
+  Object.keys(approvedScorer).forEach(key=>{if(approvedScorer[key]===name)delete approvedScorer[key];});
   // Scrub from cancellations
   Object.keys(cancellations).forEach(key=>{if(cancellations[key]&&cancellations[key].refName===name)delete cancellations[key];});
   // Scrub from needsReplacement (game was their assignment)
@@ -1750,13 +1875,13 @@ async function initFirebase(){
     if(oData&&oData.list){officials=[...new Set([...oData.list,...DEFAULT_OFFICIALS])];localStorage.setItem('idhf-officials',JSON.stringify(officials));buildOfficialDropdown();if(lastOff){const sel=document.getElementById('officialSelect');if([...sel.options].some(o=>o.value===lastOff)){sel.value=lastOff;updateMineBadge();}}}
     else await saveOfficials();
     const cData=await fbGet('completed');if(cData){completedOverrides=cData;localStorage.setItem('idhf-completed',JSON.stringify(completedOverrides));}
+    const cScData=await fbGet('completedScorer');if(cScData){completedScorer=cScData;localStorage.setItem('idhf-completed-sc',JSON.stringify(completedScorer));}
     const pData=await fbGet('profiles');if(pData){profiles=pData;localStorage.setItem('idhf-profiles',JSON.stringify(profiles));}
     const pyData=await fbGet('payments');if(pyData){payments=pyData;localStorage.setItem('idhf-payments',JSON.stringify(payments));}
     const cancelData=await fbGet('cancellations');
     if(cancelData){
       cancellations={};
       Object.keys(cancelData).forEach(k=>{if(cancelData[k].seen===false)cancellations[k]=cancelData[k];});
-      // Ensure approved doesn't still show a ref who cancelled
       Object.keys(cancellations).forEach(k=>{if(approved[k]===cancellations[k].refName)delete approved[k];});
       localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));
     }
@@ -1765,24 +1890,38 @@ async function initFirebase(){
     const data=await fbGet('state');
     if(data){availability=data.availability||{};approved=data.approved||{};localStorage.setItem('idhf-avail',JSON.stringify(availability));localStorage.setItem('idhf-approved',JSON.stringify(approved));refreshCurrentTab();updateMineBadge();updateCommPendingAlert();}
     else await fbSet('state',{availability,approved});
+    const scData=await fbGet('stateScorer');
+    if(scData){availabilityScorer=scData.availabilityScorer||{};approvedScorer=scData.approvedScorer||{};localStorage.setItem('idhf-avail-sc',JSON.stringify(availabilityScorer));localStorage.setItem('idhf-approved-sc',JSON.stringify(approvedScorer));}
+    else await fbSet('stateScorer',{availabilityScorer,approvedScorer});
     setSyncStatus('● Live','#5a9a5a');startPolling();
     hpInit(); // Show homepage now that roster is loaded
   }catch(e){setSyncStatus('⚠ '+e.message,'#c0392b');hpInit();}
 }
 
 // ── HOMEPAGE ──────────────────────────────────────────────────────────────
-let _hpZelleChoice='no',_hpSelectedRef=null;
+let _hpZelleChoice='no',_hpSelectedRef=null,_hpRoles=new Set(['ref']);
 
+function hpToggleRole(role){
+  if(_hpRoles.has(role)&&_hpRoles.size>1)_hpRoles.delete(role);
+  else _hpRoles.add(role);
+  document.getElementById('role-ref').classList.toggle('selected',_hpRoles.has('ref'));
+  document.getElementById('role-scorer').classList.toggle('selected',_hpRoles.has('scorer'));
+}
+
+let _hpInited=false;
 function hpInit(){
-  // Copy logos into homepage
+  if(_hpInited)return;
+  _hpInited=true;
+  // Copy logos into homepage (only once)
   const ihlImg=document.querySelector('header img[alt="IHL"]');
   const fhlImg=document.querySelector('header img[alt="FHL"]');
-  if(ihlImg){const c=document.getElementById('hp-ihl-logo');if(c){const i=ihlImg.cloneNode();i.style.cssText='width:56px;height:56px;border-radius:50%;object-fit:cover;';c.appendChild(i);}}
-  if(fhlImg){const c=document.getElementById('hp-fhl-logo');if(c){const i=fhlImg.cloneNode();i.style.cssText='width:56px;height:56px;border-radius:50%;object-fit:cover;';c.appendChild(i);}}
-  // Check if already signed in
+  const ihlC=document.getElementById('hp-ihl-logo');
+  const fhlC=document.getElementById('hp-fhl-logo');
+  if(ihlImg&&ihlC&&!ihlC.hasChildNodes()){const i=ihlImg.cloneNode();i.style.cssText='width:56px;height:56px;border-radius:50%;object-fit:cover;';ihlC.appendChild(i);}
+  if(fhlImg&&fhlC&&!fhlC.hasChildNodes()){const i=fhlImg.cloneNode();i.style.cssText='width:56px;height:56px;border-radius:50%;object-fit:cover;';fhlC.appendChild(i);}
+  // Auto sign back in if returning user with PIN
   const lastOff=localStorage.getItem('idhf-last-official');
   if(lastOff&&officials.includes(lastOff)){
-    // Auto sign back in if they have a profile PIN already set
     if(profiles[lastOff]&&profiles[lastOff].pin){
       hpEnterAsRef(lastOff);return;
     }
@@ -1850,8 +1989,11 @@ document.addEventListener('keydown',e=>{
 function hpShowNewRef(){
   ['hp-first','hp-last','hp-phone','hp-email','hp-zelle-other-val','hp-new-pin'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   _hpZelleChoice='no';
+  _hpRoles=new Set(['ref']);
   document.querySelectorAll('.zelle-opt').forEach(o=>o.classList.remove('selected'));
   document.getElementById('zelle-no').classList.add('selected');
+  document.getElementById('role-ref').classList.add('selected');
+  document.getElementById('role-scorer').classList.remove('selected');
   document.getElementById('hp-zelle-other-field').style.display='none';
   document.getElementById('hp-new-ref-error').textContent='';
   hpShow('new-ref');
@@ -1886,7 +2028,7 @@ async function hpCreateRef(){
   else if(_hpZelleChoice==='other')zelle=zelleOther;
   // Save profile
   officials.push(fullName);
-  profiles[fullName]={pin,phone,email,zelle};
+  profiles[fullName]={pin,phone,email,zelle,roles:[..._hpRoles]};
   await saveOfficials();
   await saveProfiles();
   buildOfficialDropdown();
@@ -1965,8 +2107,12 @@ document.getElementById('officialSelect').addEventListener('change',()=>{
   }catch(e){}
 });
 
-if(location.protocol==='https:'||location.hostname==='localhost'){initFirebase().catch(e=>{setSyncStatus('⚠ Offline','#c8a840');});}
-else setSyncStatus('⚠ Local — sync disabled','#c8a840');
+if(location.protocol==='https:'||location.hostname==='localhost'){
+  initFirebase().catch(e=>{setSyncStatus('⚠ Offline','#c8a840');hpInit();});
+} else {
+  setSyncStatus('⚠ Local — sync disabled','#c8a840');
+  hpInit();
+}
 </script>
 </body>
 </html>
