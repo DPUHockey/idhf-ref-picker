@@ -427,8 +427,9 @@
   </div>
 
   <!-- Comm bar: actions (hidden in ref mode) -->
-  <div id="comm-bar" style="display:none;background:#1a0f20;border:1px solid var(--gold);border-radius:8px;padding:10px 12px;margin-bottom:12px;display:none;align-items:center;gap:8px;flex-wrap:wrap;">
+  <div id="comm-bar" style="display:none;background:#1a0f20;border:1px solid var(--gold);border-radius:8px;padding:10px 12px;margin-bottom:12px;align-items:center;gap:8px;flex-wrap:wrap;">
     <span style="color:var(--gold);font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">⛳ Commissioner Mode</span>
+    <span id="comm-pending-alert" style="display:none;background:#c0392b;color:#fff;font-size:10px;font-weight:700;border-radius:4px;padding:2px 8px;">⚑ <span id="comm-pending-count">0</span> games need assignment</span>
     <div style="display:flex;gap:6px;margin-left:auto;">
       <button class="reset-btn" onclick="openReset()">↺ Reset All</button>
       <button class="comm-lock-btn" onclick="lockComm()">🔒 Exit</button>
@@ -438,10 +439,10 @@
   <div class="league-tabs" id="mainTabs">
     <button class="tab active" id="tab-ihl" onclick="switchTab('ihl')">IHL <span class="badge" id="badge-ihl">0</span></button>
     <button class="tab" id="tab-fhl" onclick="switchTab('fhl')">FHL <span class="badge" id="badge-fhl">0</span></button>
-    <button class="tab" id="tab-mine" onclick="switchTab('mine')">⛳ Pending <span class="badge" id="badge-mine" style="display:none;"></span></button>
+    <button class="tab" id="tab-mine" onclick="switchTab('mine')">My Games <span class="badge" id="badge-mine" style="display:none;"></span></button>
+    <button class="tab" id="tab-done" onclick="switchTab('done')">✓ Done <span class="badge" id="badge-done" style="display:none;"></span></button>
     <button class="tab" id="tab-mypay" onclick="switchTab('mypay')">💵 Pay</button>
     <button class="tab" id="tab-profile" onclick="switchTab('profile')">👤 Profile</button>
-    <button class="tab" id="tab-cal" onclick="switchTab('cal')">📅 Cal</button>
     <button class="tab comm-only" id="tab-pay" onclick="switchTab('pay')" style="display:none;">💰 Payroll</button>
   </div>
 
@@ -460,8 +461,14 @@
 
   <!-- PENDING / MY GAMES -->
   <div class="panel" id="mine-panel" style="display:none;">
-    <div class="panel-header"><span id="mine-title">Pending</span></div>
+    <div class="panel-header"><span id="mine-title">My Games</span></div>
     <div id="mine-list"></div>
+  </div>
+
+  <!-- DONE / COMPLETED GAMES -->
+  <div class="panel" id="done-panel" style="display:none;">
+    <div class="panel-header"><span id="done-title">Mark Games Complete</span><span class="range" id="done-range"></span></div>
+    <div id="done-list"></div>
   </div>
 
   <!-- MY PAY (ref-facing) -->
@@ -567,7 +574,7 @@ function startPolling(){
       const pyData=await fbGet('payments');
       if(pyData){payments=pyData;localStorage.setItem('idhf-payments',JSON.stringify(payments));}
       refreshCurrentTab();
-      updateMineBadge();updatePendingBadge();
+      updateMineBadge();updateCommPendingAlert();
       setSyncStatus('● Live','#5a9a5a');
     }catch(e){setSyncStatus('⚠ Offline','#c0392b');}
   },8000);
@@ -657,7 +664,7 @@ function saveOverrides(){localStorage.setItem('idhf-completed',JSON.stringify(co
 async function saveAll(){
   localStorage.setItem('idhf-avail',JSON.stringify(availability));
   localStorage.setItem('idhf-approved',JSON.stringify(approved));
-  updateMineBadge();updatePendingBadge();
+  updateMineBadge();updateCommPendingAlert();
   setSyncStatus('Saving…','#c8a840');
   try{await fbSet('state',{availability,approved});setSyncStatus('✓ Synced','#5a9a5a');setTimeout(()=>setSyncStatus('● Live','#5a9a5a'),2000);}
   catch(e){setSyncStatus('⚠ Local','#c8a840');}
@@ -676,7 +683,7 @@ function formatDateHeader(iso){const[y,m,d]=iso.split('-').map(Number);return DA
 function isPast(iso){const[y,m,d]=iso.split('-').map(Number);const t=new Date();t.setHours(0,0,0,0);return new Date(y,m-1,d)<t;}
 function upcomingOnly(games){return games.filter(g=>!isPast(g.date));}
 function todayStr(){const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');}
-function isGameComplete(g){const k=gameKey(g.league,g);if(completedOverrides[k]===false)return false;if(completedOverrides[k]===true)return true;return isPast(g.date);}
+function isGameComplete(g){const k=gameKey(g.league,g);return completedOverrides[k]===true;}
 function getRefPayments(name){return payments[name]||[];}
 function getRefTotalPaid(name){return getRefPayments(name).reduce((s,p)=>s+(p.amount||0),0);}
 function allGames(){return[...IHL.map(g=>Object.assign({},g,{league:'ihl'})),...FHL.map(g=>Object.assign({},g,{league:'fhl'}))]}
@@ -730,10 +737,13 @@ function render(){
         availHtml+='</div>';
       }
       let actionHtml='';
+      const maxRefs=po?2:1;
+      const refsFull=avail.length>=maxRefs&&!iAmAvail;
       if(isMine)actionHtml='<span class="got-it-badge">🎉 You got it!</span>';
-      else if(isApproved)actionHtml='<span class="assigned-label">✓ '+appName+'</span>';
-      else if(official&&!iAmAvail)actionHtml='<button class="mark-avail-btn" data-key="'+encodeURIComponent(key)+'" onclick="markAvail(this)">I\'m Available</button>';
+      else if(isApproved&&!isMine)actionHtml='<span class="assigned-label">✓ '+appName+'</span>';
+      else if(official&&!iAmAvail&&!refsFull)actionHtml='<button class="mark-avail-btn" data-key="'+encodeURIComponent(key)+'" onclick="markAvail(this)">I\'m Available</button>';
       else if(iAmAvail)actionHtml='<span class="already-avail">✓ Available</span>';
+      else if(refsFull&&!isApproved)actionHtml='<span style="font-size:11px;color:var(--muted);font-style:italic;">Full</span>';
       html+='<div class="game-row '+rowClass+'"><div class="game-time">'+g.time+'</div><div class="game-info"><div class="game-matchup">'+g.away+' vs '+g.home+(po?'<span class="playoff-tag">PLAYOFF</span>':'')+(needsRef?'<span class="needs-ref-tag">🔴 Needs Ref!</span>':'')+'</div><div class="game-meta">Inwood Ice Arena</div>'+availHtml+'</div><div class="game-action">'+actionHtml+'</div></div>';
     });
   });
@@ -753,7 +763,7 @@ function approveRefNR(el){
   const key=decodeURIComponent(el.dataset.key),name=decodeURIComponent(el.dataset.name);
   approved[key]=name;
   if(needsReplacement[key]){delete needsReplacement[key];localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));fbSet('needsReplacement',needsReplacement).catch(e=>{});}
-  saveAll();updatePendingBadge();setTimeout(()=>renderPending(),100);showBanner(name+' assigned');
+  saveAll();updateCommPendingAlert();setTimeout(()=>renderPending(),100);showBanner(name+' assigned');
 }
 function unapproveRef(el){const key=decodeURIComponent(el.dataset.key);delete approved[key];saveAll();render();showBanner('Assignment undone');}
 
@@ -856,17 +866,17 @@ function renderCal(){
 function refreshCurrentTab(){
   const at=document.querySelector('.tab.active');if(!at)return;
   const t=at.id.replace('tab-','');
-  if(t==='cal')renderCal();else if(t==='mine')renderMyGames();else if(t==='mypay')renderMyPay();else if(t==='pending')renderPending();else if(t==='pay')renderPayroll();else if(t==='profile')renderProfileTab();else render();
+  if(t==='mine')renderMyGames();else if(t==='done')renderDoneGames();else if(t==='mypay')renderMyPay();else if(t==='pending')renderPending();else if(t==='pay')renderPayroll();else if(t==='profile')renderProfileTab();else render();
 }
 
 function switchTab(tab){
-  if(tab!=='cal'&&tab!=='mine'&&tab!=='mypay'&&tab!=='pending'&&tab!=='pay'&&tab!=='profile')activeLeague=tab;
+  if(tab!=='mine'&&tab!=='done'&&tab!=='mypay'&&tab!=='pending'&&tab!=='pay'&&tab!=='profile')activeLeague=tab;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
-  document.getElementById('tab-'+tab).classList.add('active');
-  const panels=['list-panel','mine-panel','mypay-panel','pending-panel','pay-panel','profile-panel','cal-panel'];
+  const tabEl=document.getElementById('tab-'+tab);if(tabEl)tabEl.classList.add('active');
+  const panels=['list-panel','mine-panel','done-panel','mypay-panel','pending-panel','pay-panel','profile-panel'];
   panels.forEach(id=>{const el=document.getElementById(id);if(el){el.style.display='none';el.classList.remove('active');}});
-  if(tab==='cal'){document.getElementById('cal-panel').classList.add('active');document.getElementById('cal-panel').style.display='';renderCal();}
-  else if(tab==='mine'){document.getElementById('mine-panel').style.display='';renderMyGames();}
+  if(tab==='mine'){document.getElementById('mine-panel').style.display='';renderMyGames();}
+  else if(tab==='done'){document.getElementById('done-panel').style.display='';renderDoneGames();}
   else if(tab==='mypay'){document.getElementById('mypay-panel').classList.add('active');document.getElementById('mypay-panel').style.display='';renderMyPay();}
   else if(tab==='pending'){document.getElementById('pending-panel').classList.add('active');document.getElementById('pending-panel').style.display='';renderPending();}
   else if(tab==='pay'){document.getElementById('pay-panel').classList.add('active');document.getElementById('pay-panel').style.display='';renderPayroll();}
@@ -944,6 +954,7 @@ function renderMyGames(){
 
 function updateMineBadge(){
   const badge=document.getElementById('badge-mine');
+  if(!badge)return;
   if(commMode){
     const count=Object.values(cancellations).filter(c=>c.seen===false).length;
     badge.textContent=count;
@@ -957,6 +968,95 @@ function updateMineBadge(){
   badge.textContent=count;
   badge.style.display=count>0?'':'none';
   badge.classList.remove('badge-cancel');
+  // Also update done badge
+  updateDoneBadge();
+}
+
+function updateDoneBadge(){
+  const badge=document.getElementById('badge-done');if(!badge)return;
+  const official=selectedOfficial();if(!official||commMode){badge.style.display='none';return;}
+  // Past assigned games not yet marked complete by this ref
+  const ag=allGames();
+  const pending=ag.filter(g=>{
+    const k=gameKey(g.league,g);
+    return approved[k]===official&&isPast(g.date)&&completedOverrides[k]!==true;
+  }).length;
+  badge.textContent=pending;
+  badge.style.display=pending>0?'':'none';
+  if(pending>0)badge.classList.add('badge-cancel');else badge.classList.remove('badge-cancel');
+}
+
+// ── DONE GAMES (ref marks complete to trigger pay) ────────────────────────
+function renderDoneGames(){
+  const official=selectedOfficial();
+  const el=document.getElementById('done-list');
+  document.getElementById('done-title').textContent=commMode?'Game Completion':'Mark Your Games Complete';
+
+  if(commMode){
+    // Commissioner sees all past assigned games with toggle
+    const ag=allGames();
+    const pastGames=ag.filter(g=>approved[gameKey(g.league,g)]&&isPast(g.date)).sort((a,b)=>b.date.localeCompare(a.date));
+    document.getElementById('done-range').textContent=pastGames.length+' past games';
+    if(!pastGames.length){el.innerHTML='<div class="no-games-msg">No past games yet.</div>';return;}
+    let html='';
+    pastGames.forEach(g=>{
+      const key=gameKey(g.league,g),refName=approved[key],done=completedOverrides[key]===true;
+      const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
+      const sk=encodeURIComponent(key);
+      html+='<div class="my-game-row" style="background:'+(done?'#f0faf0':'#fff')+';border-left:4px solid '+(done?'#1a7a3c':'var(--border))+'">';
+      html+='<div class="my-game-row-top"><span class="my-game-date">'+ds+'</span><span style="color:var(--muted);font-size:11px;">·</span><span class="my-game-time">'+g.time+'</span><span class="my-game-league'+(g.league==='fhl'?' fhl':'')+'">'+g.league.toUpperCase()+'</span></div>';
+      html+='<div class="my-game-matchup">'+g.away+' vs '+g.home+'</div>';
+      html+='<div class="my-game-row-bot"><span style="font-size:12px;color:var(--muted);">Ref: '+refName+'</span>';
+      if(done)html+='<button class="override-btn" onclick="toggleComplete(\''+sk+'\',false)">↺ Undo</button>';
+      else html+='<button class="comm-pick-btn" style="font-size:11px;" onclick="toggleComplete(\''+sk+'\',true)">✓ Mark Done</button>';
+      html+='</div></div>';
+    });
+    el.innerHTML=html;
+    return;
+  }
+
+  if(!official){el.innerHTML='<div class="no-games-msg">Select your name to mark completed games.</div>';return;}
+  const ag=allGames();
+  const myPast=ag.filter(g=>approved[gameKey(g.league,g)]===official&&isPast(g.date)).sort((a,b)=>b.date.localeCompare(a.date));
+  document.getElementById('done-range').textContent=myPast.length+' past';
+  if(!myPast.length){el.innerHTML='<div class="no-games-msg">No past games yet.</div>';return;}
+  let html='';
+  myPast.forEach(g=>{
+    const key=gameKey(g.league,g),done=completedOverrides[key]===true;
+    const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
+    const sk=encodeURIComponent(key);
+    html+='<div class="my-game-row" style="background:'+(done?'#f0faf0':'#fff')+';border-left:4px solid '+(done?'#1a7a3c':'var(--border))+'">';
+    html+='<div class="my-game-row-top"><span class="my-game-date">'+ds+'</span><span style="color:var(--muted);font-size:11px;">·</span><span class="my-game-time">'+g.time+'</span><span class="my-game-league'+(g.league==='fhl'?' fhl':'')+'">'+g.league.toUpperCase()+'</span></div>';
+    html+='<div class="my-game-matchup">'+g.away+' vs '+g.home+'</div>';
+    html+='<div class="my-game-row-bot"><span style="font-size:12px;color:'+(done?'#1a7a3c':'var(--muted)')+';">'+(done?'✓ Completed — $'+PAY_RATE+' earned':'Tap to confirm you worked this game')+'</span>';
+    if(!done)html+='<button class="comm-pick-btn" style="font-size:11px;background:#1a7a3c;color:#fff;border-color:#1a7a3c;" onclick="refMarkDone(\''+sk+'\')">✓ Done</button>';
+    else html+='<button class="override-btn" onclick="refMarkUndone(\''+sk+'\')">↺ Undo</button>';
+    html+='</div></div>';
+  });
+  el.innerHTML=html;
+}
+
+function refMarkDone(sk){
+  const key=decodeURIComponent(sk);
+  completedOverrides[key]=true;
+  saveOverrides();
+  updateDoneBadge();
+  renderDoneGames();
+  showBanner('✓ Game marked complete — $'+PAY_RATE+' added to your pay');
+}
+function refMarkUndone(sk){
+  const key=decodeURIComponent(sk);
+  delete completedOverrides[key];
+  saveOverrides();
+  updateDoneBadge();
+  renderDoneGames();
+  showBanner('Game unmarked');
+}
+function toggleComplete(sk,done){
+  const key=decodeURIComponent(sk);
+  if(done)completedOverrides[key]=true;else delete completedOverrides[key];
+  saveOverrides();renderDoneGames();renderPayroll();
+  showBanner(done?'✓ Marked complete':'↺ Marked incomplete');
 }
 
 // ── MY PAY (ref-facing) ───────────────────────────────────────────────────
@@ -1024,13 +1124,16 @@ function renderMyPay(){
 }
 
 // ── PENDING ───────────────────────────────────────────────────────────────
-function updatePendingBadge(){
-  // badge-pending tab was removed — pending count now lives on badge-mine for commissioner
-  // Just update the mine badge which handles both modes
-  updateMineBadge();
+function updateCommPendingAlert(){
+  if(!commMode)return;
+  const ag=allGames();
+  const pending=ag.filter(g=>{const k=gameKey(g.league,g);return(availability[k]||[]).length>0&&!approved[k]&&!isPast(g.date);}).length;
+  const alert=document.getElementById('comm-pending-alert');
+  const count=document.getElementById('comm-pending-count');
+  if(alert&&count){count.textContent=pending;alert.style.display=pending>0?'':'none';}
 }
 function renderPending(){
-  updatePendingBadge();
+  updateCommPendingAlert();
   const ag=allGames();
   const pendingGames=ag.filter(g=>{const k=gameKey(g.league,g);return(availability[k]||[]).length>0&&!approved[k]&&!isPast(g.date);}).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
   const cancelList=Object.keys(cancellations).map(key=>{const c=cancellations[key],g=ag.find(g=>gameKey(g.league,g)===key);return{key,c,g};}).filter(x=>x.g&&x.c.seen===false).sort((a,b)=>(b.c.timestamp||0)-(a.c.timestamp||0));
@@ -1072,7 +1175,7 @@ function renderPending(){
     const key=gameKey(g.league,g),avail=availability[key]||[];
     const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
     html+='<div class="pending-row"><span class="pending-league'+(g.league==='fhl'?' fhl':'')+'">'+g.league.toUpperCase()+'</span><div class="pending-info"><div class="pending-matchup">'+g.away+' vs '+g.home+'</div><div class="pending-meta">'+ds+' · '+g.time+'</div><div class="pending-avail">';
-    avail.forEach(name=>{const sk=encodeURIComponent(key),sn=encodeURIComponent(name);html+='<div class="pending-avail-item"><span style="font-weight:600;">'+name+'</span><button class="comm-pick-btn" data-key="'+sk+'" data-name="'+sn+'" onclick="approveRef(this);updatePendingBadge();setTimeout(()=>renderPending(),100)">✓ Assign</button></div>';});
+    avail.forEach(name=>{const sk=encodeURIComponent(key),sn=encodeURIComponent(name);html+='<div class="pending-avail-item"><span style="font-weight:600;">'+name+'</span><button class="comm-pick-btn" data-key="'+sk+'" data-name="'+sn+'" onclick="approveRef(this);updateCommPendingAlert();setTimeout(()=>renderPending(),100)">✓ Assign</button></div>';});
     html+='</div></div></div>';
   });
   el.innerHTML=html;
@@ -1087,7 +1190,7 @@ function dismissCancellation(ek){
     saveCancellations();
     fbSet('needsReplacement',needsReplacement).catch(e=>{});
   }
-  updatePendingBadge();updateMineBadge();
+  updateCommPendingAlert();updateMineBadge();
   // Refresh whichever tab is showing
   const at=document.querySelector('.tab.active');
   if(at&&at.id==='tab-mine')renderMyGames();
@@ -1171,7 +1274,7 @@ async function confirmCancelGame(){
     await Promise.all([fbSet('state',{availability,approved}),fbSet('cancellations',cancellations)]);
     setSyncStatus('✓ Synced','#5a9a5a');setTimeout(()=>setSyncStatus('● Live','#5a9a5a'),2000);
   }catch(e){setSyncStatus('⚠ Saved locally','#c8a840');}
-  updateMineBadge();updatePendingBadge();
+  updateMineBadge();updateCommPendingAlert();
   // Refresh My Games so the "pending" badge shows instead of cancel button
   renderMyGames();
   showBanner('✖ Game cancelled — commissioner notified');
@@ -1425,7 +1528,7 @@ async function initFirebase(){
     }
     const nrData=await fbGet('needsReplacement');if(nrData){needsReplacement=nrData;localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));}
     const data=await fbGet('state');
-    if(data){availability=data.availability||{};approved=data.approved||{};localStorage.setItem('idhf-avail',JSON.stringify(availability));localStorage.setItem('idhf-approved',JSON.stringify(approved));refreshCurrentTab();updateMineBadge();updatePendingBadge();}
+    if(data){availability=data.availability||{};approved=data.approved||{};localStorage.setItem('idhf-avail',JSON.stringify(availability));localStorage.setItem('idhf-approved',JSON.stringify(approved));refreshCurrentTab();updateMineBadge();updateCommPendingAlert();}
     else await fbSet('state',{availability,approved});
     setSyncStatus('● Live','#5a9a5a');startPolling();
   }catch(e){setSyncStatus('⚠ '+e.message,'#c0392b');}
