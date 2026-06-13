@@ -429,17 +429,33 @@ self.addEventListener('fetch', e => {
 
 <div class="modal-overlay" id="payoutModal">
   <div class="modal">
-    <h3>💵 Record Payment</h3>
-    <div class="payout-ref-name" id="payoutRefName"></div>
+    <h3>💵 <span id="payoutRefName"></span></h3>
     <div class="payout-balance" id="payoutBalance"></div>
-    <input class="payout-input" id="payoutAmount" type="number" step="5" placeholder="$0">
-    <p style="font-size:11px;color:var(--muted);margin:-6px 0 10px;">Negative number to correct an overpayment.</p>
-    <input class="text-input" id="payoutNote" type="text" placeholder="Note (optional)" style="margin-bottom:10px;">
-    <div class="payout-history" id="payoutHistory"></div>
-    <div class="pin-error" id="payoutError"></div>
-    <div class="modal-btns">
-      <button class="btn-cancel" onclick="closeModal('payoutModal')">Cancel</button>
-      <button class="btn-primary" onclick="confirmPayout()">Record Payment</button>
+
+    <!-- New payment entry -->
+    <div style="margin:12px 0 8px;border-top:1px solid var(--border);padding-top:12px;">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Record Payment</div>
+      <input class="payout-input" id="payoutAmount" type="number" step="5" placeholder="$0">
+      <p style="font-size:11px;color:var(--muted);margin:-6px 0 8px;">Negative to correct overpayment.</p>
+      <input class="text-input" id="payoutNote" type="text" placeholder="Note (optional)" style="margin-bottom:8px;">
+      <div class="pin-error" id="payoutError"></div>
+      <button class="btn-primary" style="width:100%;" onclick="confirmPayout()">Record Payment</button>
+    </div>
+
+    <!-- Transaction history with checkboxes -->
+    <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:10px;" id="payoutHistorySection">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:0.8px;">Payment History</div>
+        <div style="display:flex;gap:6px;" id="payoutDeleteBar" style="display:none;">
+          <button onclick="payoutSelectAll()" style="font-size:11px;color:var(--muted);background:none;border:1px solid var(--border);border-radius:4px;padding:3px 8px;cursor:pointer;" id="payoutSelectAllBtn">Select All</button>
+          <button onclick="payoutDeleteSelected()" style="font-size:11px;font-weight:700;color:#fff;background:#c0392b;border:none;border-radius:4px;padding:3px 10px;cursor:pointer;">Delete Selected</button>
+        </div>
+      </div>
+      <div id="payoutHistory"></div>
+    </div>
+
+    <div class="modal-btns" style="margin-top:12px;">
+      <button class="btn-cancel" onclick="closeModal('payoutModal')">Close</button>
     </div>
   </div>
 </div>
@@ -1751,58 +1767,161 @@ function renderPayroll(){
   const refs=Object.keys(refMap).sort(),totalEarned=refs.reduce((s,r)=>s+refMap[r].earned,0),totalPaid=refs.reduce((s,r)=>s+getRefTotalPaid(r),0),totalOwed=totalEarned-totalPaid;
   document.getElementById('pay-total-label').textContent='Owed: $'+Math.max(0,totalOwed).toLocaleString();
   if(!refs.length){document.getElementById('pay-list').innerHTML='<div class="no-games-msg">No assigned games yet.</div>';document.getElementById('pay-summary').textContent='';return;}
-  let html='<table class="pay-table"><thead><tr><th>Official</th><th>Done</th><th>Earned</th><th>Paid</th><th>Balance</th><th></th></tr></thead><tbody>';
+
+  let html='';
+  // Reset all payments button
+  html+='<div style="padding:10px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:flex-end;">';
+  html+='<button onclick="openResetPayments()" style="font-size:11px;font-weight:700;color:#c0392b;background:#ffeaea;border:1px solid #f0b0b0;border-radius:5px;padding:6px 12px;cursor:pointer;">↺ Reset Payment History</button>';
+  html+='</div>';
+
+  // Clickable ref cards
   refs.forEach(name=>{
     const r=refMap[name],earned=r.earned,paid=getRefTotalPaid(name),balance=earned-paid;
-    const balCls=balance>0?'pay-balance-owed':'pay-balance-clear',balTxt=balance>0?'−$'+balance.toLocaleString():(balance<0?'+$'+Math.abs(balance)+' over':'✓ Clear');
     const sn=encodeURIComponent(name);
     const breakdown=[];
     if(r.completed.length)breakdown.push('🏒 '+r.completed.length+'×$'+PAY_RATE);
     if(r.scorerCompleted&&r.scorerCompleted.length)breakdown.push('📋 '+r.scorerCompleted.length+'×$'+SCORER_RATE);
     const doneStr=(r.completed.length+((r.scorerCompleted&&r.scorerCompleted.length)||0))+'/'+(r.assigned.length+((r.scorerAssigned&&r.scorerAssigned.length)||0));
-    html+='<tr><td style="font-weight:600;">'+name+(breakdown.length?'<div style="font-size:10px;color:var(--muted);margin-top:2px;">'+breakdown.join(' · ')+'</div>':'')+'<br><div style="display:flex;gap:4px;margin-top:4px;flex-wrap:wrap;"><button class="pay-out-btn" onclick="openPayout(\''+sn+'\')">💵 Pay</button><button class="pay-out-btn" style="background:var(--maroon);" onclick="commEditProfile(\''+sn+'\')">✏️ Profile</button><button class="delete-ref-btn" onclick="openDeleteRef(\''+sn+'\')">🗑</button></div></td>';
-    html+='<td>'+doneStr+'</td>';
-    html+='<td class="'+(earned>0?'pay-due':'pay-zero')+'">'+(earned>0?'$'+earned:'—')+'</td>';
-    html+='<td style="color:#1a7a3c;font-weight:'+(paid>0?'700':'400')+'">'+(paid>0?'$'+paid:'—')+'</td>';
-    html+='<td class="'+balCls+'">'+balTxt+'</td><td></td></tr>';
+    const balColor=balance>0?'var(--maroon)':balance<0?'#7a4000':'#1a7a3c';
+    const balTxt=balance>0?'Owes $'+balance:(balance<0?'Overpaid $'+Math.abs(balance):'✓ Paid up');
+    html+='<div onclick="openPayout(\''+sn+'\')" style="padding:14px 16px;border-bottom:1px solid var(--border);cursor:pointer;display:flex;align-items:center;gap:12px;transition:background 0.1s;" onmouseover="this.style.background=\'#f8f0f2\'" onmouseout="this.style.background=\'\'">';
+    // Avatar
+    const initials=name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase();
+    html+='<div style="width:40px;height:40px;border-radius:50%;background:var(--maroon);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;">'+initials+'</div>';
+    // Info
+    html+='<div style="flex:1;min-width:0;">';
+    html+='<div style="font-size:14px;font-weight:700;color:var(--dark);">'+name+'</div>';
+    html+='<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+doneStr+' games done'+(breakdown.length?' · '+breakdown.join(' · '):'')+'</div>';
+    html+='</div>';
+    // Balance
+    html+='<div style="text-align:right;flex-shrink:0;">';
+    html+='<div style="font-size:15px;font-weight:800;color:'+balColor+';">$'+Math.abs(balance)+'</div>';
+    html+='<div style="font-size:10px;color:'+balColor+';font-weight:600;">'+balTxt+'</div>';
+    html+='</div>';
+    html+='<div style="color:var(--muted);font-size:16px;flex-shrink:0;">›</div>';
+    html+='</div>';
   });
-  html+='<tr class="pay-total-row"><td colspan="2">TOTALS</td><td class="pay-due">$'+totalEarned+'</td><td style="color:#6aaa80;">$'+totalPaid+'</td><td class="pay-due">$'+Math.max(0,totalOwed)+'</td><td></td></tr>';
-  html+='</tbody></table>';
+
+  // Totals footer
+  html+='<div style="padding:12px 16px;background:#f5f5f5;display:flex;justify-content:space-between;font-size:13px;font-weight:700;color:var(--dark);">';
+  html+='<span>'+refs.length+' official'+(refs.length>1?'s':'')+' · $'+totalEarned+' earned</span>';
+  html+='<span style="color:var(--maroon);">$'+Math.max(0,totalOwed)+' owed</span>';
+  html+='</div>';
+
   document.getElementById('pay-list').innerHTML=html;
-  document.getElementById('pay-summary').textContent='$'+PAY_RATE+' per game · '+refs.length+' official'+(refs.length>1?'s':'')+' · earned $'+totalEarned+' paid $'+totalPaid;
+  document.getElementById('pay-summary').textContent='';
 }
-function markComplete(sk){const key=decodeURIComponent(sk);completedOverrides[key]=true;saveOverrides();renderPayroll();}
-function markIncomplete(sk){const key=decodeURIComponent(sk);completedOverrides[key]=false;saveOverrides();renderPayroll();}
+
+function openResetPayments(){
+  if(!confirm('Clear ALL payment history for all refs? This cannot be undone.'))return;
+  payments={};
+  savePayments();
+  renderPayroll();
+  showBanner('Payment history cleared');
+}
 
 // ── PAYOUT ────────────────────────────────────────────────────────────────
 function openPayout(en){
   const name=decodeURIComponent(en);_pendingPayoutRef=name;
-  const ag=allGames();
-  let earnedRef=0,earnedSc=0;
+  document.getElementById('payoutRefName').textContent=name;
+  document.getElementById('payoutAmount').value='';
+  document.getElementById('payoutNote').value='';
+  document.getElementById('payoutError').textContent='';
+  payoutRefreshBalance();
+  payoutRenderHistory();
+  document.getElementById('payoutModal').classList.add('show');
+  setTimeout(()=>document.getElementById('payoutAmount').focus(),100);
+}
+
+function payoutRefreshBalance(){
+  const name=_pendingPayoutRef;if(!name)return;
+  const ag=allGames();let earnedRef=0,earnedSc=0;
   ag.forEach(g=>{
     if(approved[gameKey(g.league,g)]===name&&isGameComplete(g))earnedRef+=PAY_RATE;
     if(approvedScorer[gameKey(g.league,g)]===name&&isScorerComplete(g))earnedSc+=SCORER_RATE;
   });
-  const earned=earnedRef+earnedSc;
-  const paid=getRefTotalPaid(name),balance=earned-paid;
-  document.getElementById('payoutRefName').textContent=name;
+  const earned=earnedRef+earnedSc,paid=getRefTotalPaid(name),balance=earned-paid;
   const breakdown=[];
-  if(earnedRef)breakdown.push('🏒 $'+earnedRef+' ref');
-  if(earnedSc)breakdown.push('📋 $'+earnedSc+' scorer');
-  document.getElementById('payoutBalance').innerHTML='Earned: <strong>$'+earned+'</strong>'+(breakdown.length?' <span style="font-size:11px;color:var(--muted);">('+breakdown.join(' + ')+')</span>':'')+' | Paid: <strong style="color:#1a7a3c;">$'+paid+'</strong> | Balance: <strong style="color:'+(balance>0?'var(--maroon)':'#1a7a3c')+';">$'+balance+'</strong>';
-  document.getElementById('payoutAmount').value=balance>0?balance:'';
-  document.getElementById('payoutNote').value='';document.getElementById('payoutError').textContent='';
+  if(earnedRef)breakdown.push('🏒 $'+earnedRef);
+  if(earnedSc)breakdown.push('📋 $'+earnedSc);
+  document.getElementById('payoutBalance').innerHTML=
+    'Earned: <strong>$'+earned+'</strong>'+(breakdown.length?' <span style="font-size:11px;color:var(--muted);">('+breakdown.join(' + ')+')</span>':'')+
+    ' | Paid: <strong style="color:#1a7a3c;">$'+paid+'</strong>'+
+    ' | Balance: <strong style="color:'+(balance>0?'var(--maroon)':'#1a7a3c')+';">$'+Math.abs(balance)+(balance>0?' owed':balance<0?' over':' ✓')+'</strong>';
+  // Auto-fill amount with balance owed
+  if(!document.getElementById('payoutAmount').value&&balance>0)
+    document.getElementById('payoutAmount').value=balance;
+}
+
+function payoutRenderHistory(){
+  const name=_pendingPayoutRef;
   const hist=getRefPayments(name);
-  document.getElementById('payoutHistory').innerHTML=hist.length?hist.slice().reverse().map(p=>'<div class="payout-hist-item"><span>'+p.date+(p.note?' · '+p.note:'')+'</span><span style="font-weight:700;color:'+(p.amount<0?'#c0392b':'#1a7a3c')+';">'+(p.amount<0?'-$'+Math.abs(p.amount):'$'+p.amount)+'</span></div>').join(''):'<div style="font-size:12px;color:var(--muted);text-align:center;padding:6px 0;">No payments yet</div>';
-  document.getElementById('payoutModal').classList.add('show');setTimeout(()=>document.getElementById('payoutAmount').focus(),100);
+  const el=document.getElementById('payoutHistory');
+  const bar=document.getElementById('payoutDeleteBar');
+  if(!hist.length){
+    el.innerHTML='<div style="font-size:12px;color:var(--muted);text-align:center;padding:10px 0;">No payment history yet.</div>';
+    if(bar)bar.style.display='none';
+    return;
+  }
+  if(bar)bar.style.display='flex';
+  // Render newest first, each with a checkbox and index
+  el.innerHTML=hist.slice().reverse().map((p,ri)=>{
+    const i=hist.length-1-ri; // original index
+    const amtColor=p.amount<0?'#c0392b':'#1a7a3c';
+    const amtTxt=(p.amount<0?'−$'+Math.abs(p.amount):'$'+p.amount);
+    return '<label style="display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:1px solid #f0f0f0;cursor:pointer;">'
+      +'<input type="checkbox" data-idx="'+i+'" style="width:18px;height:18px;flex-shrink:0;accent-color:var(--maroon);cursor:pointer;">'
+      +'<span style="flex:1;font-size:12px;color:var(--dark);">'+p.date+(p.note?' <span style="color:var(--muted);">· '+p.note+'</span>':'')+'</span>'
+      +'<span style="font-weight:700;color:'+amtColor+';font-size:13px;flex-shrink:0;">'+amtTxt+'</span>'
+      +'</label>';
+  }).join('');
+  document.getElementById('payoutSelectAllBtn').textContent='Select All';
+}
+
+function payoutSelectAll(){
+  const checkboxes=document.querySelectorAll('#payoutHistory input[type=checkbox]');
+  const allChecked=[...checkboxes].every(c=>c.checked);
+  checkboxes.forEach(c=>c.checked=!allChecked);
+  document.getElementById('payoutSelectAllBtn').textContent=allChecked?'Select All':'Deselect All';
+}
+
+function payoutDeleteSelected(){
+  const name=_pendingPayoutRef;if(!name)return;
+  const checked=[...document.querySelectorAll('#payoutHistory input[type=checkbox]:checked')];
+  if(!checked.length){showBanner('Select transactions to delete');return;}
+  const idxToDelete=new Set(checked.map(c=>parseInt(c.dataset.idx)));
+  if(!confirm('Delete '+idxToDelete.size+' transaction'+(idxToDelete.size>1?'s':'')+' for '+name+'?'))return;
+  payments[name]=(payments[name]||[]).filter((_,i)=>!idxToDelete.has(i));
+  if(!payments[name].length)delete payments[name];
+  savePayments();
+  payoutRefreshBalance();
+  payoutRenderHistory();
+  showBanner(idxToDelete.size+' transaction'+(idxToDelete.size>1?'s':'')+' deleted');
 }
 function confirmPayout(){
   const amt=parseFloat(document.getElementById('payoutAmount').value.trim());
   if(isNaN(amt)||amt===0){document.getElementById('payoutError').textContent='Enter a non-zero amount.';return;}
   const note=document.getElementById('payoutNote').value.trim(),name=_pendingPayoutRef;
   if(!payments[name])payments[name]=[];
-  const today=new Date();payments[name].push({date:(today.getMonth()+1)+'/'+today.getDate()+'/'+today.getFullYear(),amount:amt,note:note});
-  savePayments();closeModal('payoutModal');showBanner((amt>0?'$'+amt+' paid':'$'+Math.abs(amt)+' correction')+' recorded for '+name);
+  const today=new Date();
+  payments[name].push({date:(today.getMonth()+1)+'/'+today.getDate()+'/'+today.getFullYear(),amount:amt,note:note});
+  savePayments();
+  document.getElementById('payoutAmount').value='';
+  document.getElementById('payoutNote').value='';
+  document.getElementById('payoutError').textContent='';
+  payoutRefreshBalance();
+  payoutRenderHistory();
+  showBanner((amt>0?'$'+amt+' paid':'$'+Math.abs(amt)+' correction')+' recorded for '+name);
+  renderPayroll();
+}
+function resetOnePayment(){
+  const name=_pendingPayoutRef;if(!name)return;
+  if(!confirm('Clear ALL payment history for '+name+'?'))return;
+  delete payments[name];
+  savePayments();
+  payoutRefreshBalance();
+  payoutRenderHistory();
+  showBanner('Payment history cleared for '+name);
   renderPayroll();
 }
 
