@@ -1091,7 +1091,7 @@ function render(){
       if(!commMode||_commImpersonating){
         if(isMineRef)html+='<span class="got-it-badge" style="font-size:11px;margin-top:4px;display:inline-block;">🎉 You\'re the Ref!</span>';
         else if(isRef&&!iAmAvailRef&&!isApproved)html+='<button class="mark-avail-btn" style="margin-top:4px;font-size:11px;" data-key="'+encodeURIComponent(key)+'" onclick="markAvail(this)">I\'ll Ref</button>';
-        else if(iAmAvailRef&&!isApproved)html+='<span class="already-avail">✓ Available to Ref</span>';
+        else if(iAmAvailRef&&!isApproved)html+='<button class="mark-avail-btn" style="margin-top:4px;font-size:11px;background:#3a5a8a;border-color:#3a5a8a;" data-key="'+encodeURIComponent(key)+'" data-name="'+encodeURIComponent(official)+'" onclick="removeAvailSelf(event,this)">✓ Available — tap to remove</button>';
       }
       html+='</div>';
 
@@ -1117,7 +1117,7 @@ function render(){
       if(!commMode||_commImpersonating){
         if(isMineScorer)html+='<span class="got-it-badge" style="font-size:11px;margin-top:4px;display:inline-block;background:#1a7a3c;">📋 You\'re Scoring!</span>';
         else if(isScorer&&!iAmAvailScorer&&!isScorerApproved)html+='<button class="mark-avail-btn" style="margin-top:4px;font-size:11px;background:#1a5a3a;" data-key="'+encodeURIComponent(key)+'" onclick="markScorerAvail(this)">I\'ll Score</button>';
-        else if(iAmAvailScorer&&!isScorerApproved)html+='<span class="already-avail" style="color:#1a7a3c;">✓ Available to Score</span>';
+        else if(iAmAvailScorer&&!isScorerApproved)html+='<button class="mark-avail-btn" style="margin-top:4px;font-size:11px;background:#1a5a3a;border-color:#1a5a3a;opacity:0.75;" data-key="'+encodeURIComponent(key)+'" data-name="'+encodeURIComponent(official)+'" onclick="removeScorerAvailSelf(event,this)">✓ Available — tap to remove</button>';
       }
       html+='</div>';
 
@@ -1138,6 +1138,8 @@ function markAvail(el){
   saveAll();render();
 }
 function removeAvail(e,el){e.stopPropagation();const key=decodeURIComponent(el.dataset.key),name=decodeURIComponent(el.dataset.name);if(!availability[key])return;availability[key]=availability[key].filter(n=>n!==name);if(!availability[key].length)delete availability[key];saveAll();render();}
+function removeAvailSelf(e,el){e.stopPropagation();const key=decodeURIComponent(el.dataset.key),name=selectedOfficial();if(!availability[key])return;availability[key]=availability[key].filter(n=>n!==name);if(!availability[key].length)delete availability[key];saveAll();render();showBanner('Removed from availability');}
+function removeScorerAvailSelf(e,el){e.stopPropagation();const key=decodeURIComponent(el.dataset.key),name=selectedOfficial();if(!availabilityScorer[key])return;availabilityScorer[key]=availabilityScorer[key].filter(n=>n!==name);if(!availabilityScorer[key].length)delete availabilityScorer[key];saveAll();render();showBanner('Removed from availability');}
 function removeScorerAvail(e,el){e.stopPropagation();const key=decodeURIComponent(el.dataset.key),name=decodeURIComponent(el.dataset.name);if(!availabilityScorer[key])return;availabilityScorer[key]=availabilityScorer[key].filter(n=>n!==name);if(!availabilityScorer[key].length)delete availabilityScorer[key];saveAll();render();}
 function markScorerAvail(el){
   const key=decodeURIComponent(el.dataset.key),name=selectedOfficial();
