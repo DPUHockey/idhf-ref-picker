@@ -800,6 +800,23 @@ let _pollInterval=null,_pollSlowInterval=null;
 
 async function pollFast(){
   try{
+    // Check for a commissioner reset first — if detected, wipe and re-render
+    const resetAt=await fbGet('resetAt');
+    if(resetAt){
+      const lastSeen=localStorage.getItem('idhf-reset-at');
+      if(!lastSeen||Number(resetAt)>Number(lastSeen)){
+        localStorage.setItem('idhf-reset-at',String(resetAt));
+        // Wipe everything locally
+        availability={};approved={};availabilityScorer={};approvedScorer={};
+        completedOverrides={};completedScorer={};cancellations={};cancellationsScorer={};needsReplacement={};
+        ['idhf-avail','idhf-approved','idhf-avail-sc','idhf-approved-sc',
+         'idhf-completed','idhf-completed-sc','idhf-cancels','idhf-cancels-sc','idhf-needs-replace'
+        ].forEach(k=>localStorage.setItem(k,JSON.stringify({})));
+        updateMineBadge();updateCommPendingAlert();refreshCurrentTab();
+        setSyncStatus('✓ Reset applied','#5a9a5a');
+        return; // remaining poll will run on next cycle
+      }
+    }
     // Fetch all critical data in parallel
     const [stateRes,scRes,cancelRes,cancelScRes,nrRes]=await Promise.all([
       fbGet('state'),
@@ -1208,7 +1225,8 @@ async function confirmReset(){
   localStorage.setItem('idhf-cancels',JSON.stringify({}));
   localStorage.setItem('idhf-cancels-sc',JSON.stringify({}));
   localStorage.setItem('idhf-needs-replace',JSON.stringify({}));
-  // Push everything to Firebase in parallel
+  // Push everything to Firebase in parallel, including a reset timestamp
+  const resetAt=Date.now();
   try{
     await Promise.all([
       fbSet('state',{availability:{},approved:{}}),
@@ -1217,8 +1235,10 @@ async function confirmReset(){
       fbSet('completedScorer',{}),
       fbSet('cancellations',{}),
       fbSet('cancellationsScorer',{}),
-      fbSet('needsReplacement',{})
+      fbSet('needsReplacement',{}),
+      fbSet('resetAt',resetAt)  // signal to all devices to wipe and reload
     ]);
+    localStorage.setItem('idhf-reset-at',String(resetAt));
     setSyncStatus('✓ Synced','#5a9a5a');setTimeout(()=>setSyncStatus('● Live','#5a9a5a'),2000);
   }catch(e){setSyncStatus('⚠ Local only','#c8a840');console.warn('Reset Firebase error:',e);}
   closeModal('resetModal');
