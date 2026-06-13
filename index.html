@@ -4,7 +4,58 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="IDHF Refs">
+<meta name="theme-color" content="#0f1f3d">
 <title>IDHF Ref Game Picker</title>
+<script>
+// ── SERVICE WORKER — auto-update, no version number needed ────────────────
+if('serviceWorker' in navigator){
+  const swCode = `
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
+
+self.addEventListener('fetch', e => {
+  if(e.request.method !== 'GET') return;
+  // Network-first: always try fresh, fall back to cache
+  e.respondWith(
+    fetch(e.request).then(res => {
+      if(res && res.status === 200){
+        caches.open('idhf-v1').then(c => c.put(e.request, res.clone()));
+      }
+      return res;
+    }).catch(() => caches.match(e.request))
+  );
+});
+`;
+  const blob = new Blob([swCode], {type:'application/javascript'});
+  navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
+
+  // On every open/return-to-app, fetch index.html and compare ETag/Last-Modified
+  // If server has a newer version, reload silently
+  function checkForUpdate(){
+    fetch(location.href, {method:'HEAD', cache:'no-cache'}).then(res => {
+      const etag = res.headers.get('etag') || res.headers.get('last-modified') || '';
+      const stored = sessionStorage.getItem('idhf-etag');
+      if(stored && etag && stored !== etag){
+        sessionStorage.setItem('idhf-etag', etag);
+        const b = document.getElementById('copy-banner');
+        if(b){b.textContent='🔄 New version — updating…';b.classList.add('show');}
+        setTimeout(() => location.reload(true), 1200);
+      } else if(etag){
+        sessionStorage.setItem('idhf-etag', etag);
+      }
+    }).catch(()=>{});
+  }
+
+  // Check on load and every time user returns to the tab/app
+  window.addEventListener('load', () => setTimeout(checkForUpdate, 2000));
+  document.addEventListener('visibilitychange', () => {
+    if(document.visibilityState === 'visible') checkForUpdate();
+  });
+}
+</script>
 <style>
   :root {
     --dark:#0f1f3d; --mid:#1a2f5a; --blue:#1a3a7a; --gold:#c8a840;
