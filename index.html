@@ -431,6 +431,7 @@
   <div id="comm-bar" style="display:none;background:#1a0f20;border:1px solid var(--gold);border-radius:8px;padding:10px 12px;margin-bottom:12px;align-items:center;gap:8px;flex-wrap:wrap;">
     <span style="color:var(--gold);font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">⛳ Commissioner Mode</span>
     <span id="comm-pending-alert" style="display:none;background:#c0392b;color:#fff;font-size:10px;font-weight:700;border-radius:4px;padding:2px 8px;">⚑ <span id="comm-pending-count">0</span> games need assignment</span>
+    <span id="comm-cancel-alert" style="display:none;background:#c0392b;color:#fff;font-size:10px;font-weight:700;border-radius:4px;padding:2px 8px;">⚠ <span id="comm-cancel-count">0</span> cancellation<span id="comm-cancel-plural"></span></span>
     <div style="display:flex;gap:6px;margin-left:auto;">
       <button class="reset-btn" onclick="openReset()">↺ Reset All</button>
       <button class="comm-lock-btn" onclick="lockComm()">🔒 Exit</button>
@@ -563,9 +564,11 @@ function startPolling(){
       if(cData){completedOverrides=cData;localStorage.setItem('idhf-completed',JSON.stringify(completedOverrides));}
       const cancelData=await fbGet('cancellations');
       if(cancelData){
-        // Strip out any already-acknowledged (seen:true) entries — they shouldn't stay
+        // Strip out any already-acknowledged (seen:true) entries
         cancellations={};
         Object.keys(cancelData).forEach(k=>{if(cancelData[k].seen===false)cancellations[k]=cancelData[k];});
+        // Also ensure approved doesn't still show a ref who cancelled
+        Object.keys(cancellations).forEach(k=>{if(approved[k]===cancellations[k].refName)delete approved[k];});
         localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));
       }
       const nrData=await fbGet('needsReplacement');
@@ -660,6 +663,8 @@ let payments=JSON.parse(localStorage.getItem('idhf-payments')||'{}');
 let cancellations=JSON.parse(localStorage.getItem('idhf-cancels')||'{}');
 // Strip any already-acknowledged entries that may be cached
 Object.keys(cancellations).forEach(k=>{if(cancellations[k].seen!==false)delete cancellations[k];});
+// Ensure approved doesn't still show a ref who cancelled
+Object.keys(cancellations).forEach(k=>{if(approved[k]===cancellations[k].refName)delete approved[k];});
 let needsReplacement=JSON.parse(localStorage.getItem('idhf-needs-replace')||'{}');
 let _profileUnlocked=null,_pendingDeleteRef=null,_pendingPayoutRef=null,_pendingCancelKey=null,_editingRefName=null;
 let archived=JSON.parse(localStorage.getItem('idhf-archived')||'{}');
@@ -1158,9 +1163,15 @@ function updateCommPendingAlert(){
   if(!commMode)return;
   const ag=allGames();
   const pending=ag.filter(g=>{const k=gameKey(g.league,g);return(availability[k]||[]).length>0&&!approved[k]&&!isPast(g.date);}).length;
-  const alert=document.getElementById('comm-pending-alert');
-  const count=document.getElementById('comm-pending-count');
-  if(alert&&count){count.textContent=pending;alert.style.display=pending>0?'':'none';}
+  const palert=document.getElementById('comm-pending-alert');
+  const pcount=document.getElementById('comm-pending-count');
+  if(palert&&pcount){pcount.textContent=pending;palert.style.display=pending>0?'':'none';}
+  // Cancellation alert
+  const cancels=Object.values(cancellations).filter(c=>c.seen===false).length;
+  const calert=document.getElementById('comm-cancel-alert');
+  const ccount=document.getElementById('comm-cancel-count');
+  const cplural=document.getElementById('comm-cancel-plural');
+  if(calert&&ccount){ccount.textContent=cancels;if(cplural)cplural.textContent=cancels>1?'s':'';calert.style.display=cancels>0?'':'none';}
 }
 function renderPending(){
   updateCommPendingAlert();
@@ -1615,6 +1626,8 @@ async function initFirebase(){
     if(cancelData){
       cancellations={};
       Object.keys(cancelData).forEach(k=>{if(cancelData[k].seen===false)cancellations[k]=cancelData[k];});
+      // Ensure approved doesn't still show a ref who cancelled
+      Object.keys(cancellations).forEach(k=>{if(approved[k]===cancellations[k].refName)delete approved[k];});
       localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));
     }
     const nrData=await fbGet('needsReplacement');if(nrData){needsReplacement=nrData;localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));}
