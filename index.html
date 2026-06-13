@@ -743,46 +743,72 @@ function setSyncStatus(msg,color){const el=document.getElementById('sync-status'
 async function fbGet(path){const res=await fetch(FB_PATH+'/'+path+'.json');if(!res.ok)throw new Error('GET '+res.status);return res.json();}
 async function fbSet(path,data){const res=await fetch(FB_PATH+'/'+path+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});if(!res.ok)throw new Error('SET '+res.status);return res.json();}
 
-let _pollInterval=null;
+let _pollInterval=null,_pollSlowInterval=null;
+
+async function pollFast(){
+  try{
+    // Fetch all critical data in parallel
+    const [stateRes,scRes,cancelRes,cancelScRes,nrRes]=await Promise.all([
+      fbGet('state'),
+      fbGet('stateScorer'),
+      fbGet('cancellations'),
+      fbGet('cancellationsScorer'),
+      fbGet('needsReplacement')
+    ]);
+    if(stateRes){
+      availability=stateRes.availability||{};
+      approved=stateRes.approved||{};
+      localStorage.setItem('idhf-avail',JSON.stringify(availability));
+      localStorage.setItem('idhf-approved',JSON.stringify(approved));
+    }
+    if(scRes){
+      availabilityScorer=scRes.availabilityScorer||{};
+      approvedScorer=scRes.approvedScorer||{};
+      localStorage.setItem('idhf-avail-sc',JSON.stringify(availabilityScorer));
+      localStorage.setItem('idhf-approved-sc',JSON.stringify(approvedScorer));
+    }
+    if(cancelRes&&typeof cancelRes==='object'){
+      cancellations={};
+      Object.keys(cancelRes).forEach(k=>{if(cancelRes[k]&&cancelRes[k].seen===false)cancellations[k]=cancelRes[k];});
+      Object.keys(cancellations).forEach(k=>{if(approved[k]===cancellations[k].refName)delete approved[k];});
+      localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));
+    }
+    if(cancelScRes&&typeof cancelScRes==='object'){
+      cancellationsScorer={};
+      Object.keys(cancelScRes).forEach(k=>{if(cancelScRes[k]&&cancelScRes[k].seen===false)cancellationsScorer[k]=cancelScRes[k];});
+      Object.keys(cancellationsScorer).forEach(k=>{if(approvedScorer[k]===cancellationsScorer[k].refName)delete approvedScorer[k];});
+      localStorage.setItem('idhf-cancels-sc',JSON.stringify(cancellationsScorer));
+    }
+    if(nrRes&&typeof nrRes==='object'){needsReplacement=nrRes;localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));}
+    refreshCurrentTab();
+    updateMineBadge();updateCommPendingAlert();
+    setSyncStatus('● Live','#5a9a5a');
+  }catch(e){setSyncStatus('⚠ Offline','#c0392b');}
+}
+
+async function pollSlow(){
+  try{
+    const [cData,cScData,pData,pyData,archData]=await Promise.all([
+      fbGet('completed'),
+      fbGet('completedScorer'),
+      fbGet('profiles'),
+      fbGet('payments'),
+      fbGet('archived')
+    ]);
+    if(cData){completedOverrides=cData;localStorage.setItem('idhf-completed',JSON.stringify(completedOverrides));}
+    if(cScData){completedScorer=cScData;localStorage.setItem('idhf-completed-sc',JSON.stringify(completedScorer));}
+    if(pData){profiles=pData;localStorage.setItem('idhf-profiles',JSON.stringify(profiles));}
+    if(pyData){payments=pyData;localStorage.setItem('idhf-payments',JSON.stringify(payments));}
+    if(archData){archived=archData;localStorage.setItem('idhf-archived',JSON.stringify(archived));}
+  }catch(e){/* non-critical, silently ignore */}
+}
+
 function startPolling(){
   if(_pollInterval)clearInterval(_pollInterval);
-  _pollInterval=setInterval(async()=>{
-    try{
-      const data=await fbGet('state');
-      if(data){availability=data.availability||{};approved=data.approved||{};localStorage.setItem('idhf-avail',JSON.stringify(availability));localStorage.setItem('idhf-approved',JSON.stringify(approved));}
-      const scData=await fbGet('stateScorer');
-      if(scData){availabilityScorer=scData.availabilityScorer||{};approvedScorer=scData.approvedScorer||{};localStorage.setItem('idhf-avail-sc',JSON.stringify(availabilityScorer));localStorage.setItem('idhf-approved-sc',JSON.stringify(approvedScorer));}
-      const cData=await fbGet('completed');
-      if(cData){completedOverrides=cData;localStorage.setItem('idhf-completed',JSON.stringify(completedOverrides));}
-      const cScData=await fbGet('completedScorer');
-      if(cScData){completedScorer=cScData;localStorage.setItem('idhf-completed-sc',JSON.stringify(completedScorer));}
-      const cancelData=await fbGet('cancellations');
-      if(cancelData){
-        cancellations={};
-        Object.keys(cancelData).forEach(k=>{if(cancelData[k].seen===false)cancellations[k]=cancelData[k];});
-        Object.keys(cancellations).forEach(k=>{if(approved[k]===cancellations[k].refName)delete approved[k];});
-        localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));
-      }
-      const cancelScData=await fbGet('cancellationsScorer');
-      if(cancelScData){
-        cancellationsScorer={};
-        Object.keys(cancelScData).forEach(k=>{if(cancelScData[k].seen===false)cancellationsScorer[k]=cancelScData[k];});
-        Object.keys(cancellationsScorer).forEach(k=>{if(approvedScorer[k]===cancellationsScorer[k].refName)delete approvedScorer[k];});
-        localStorage.setItem('idhf-cancels-sc',JSON.stringify(cancellationsScorer));
-      }
-      const nrData=await fbGet('needsReplacement');
-      if(nrData){needsReplacement=nrData;localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));}
-      const archData=await fbGet('archived');
-      if(archData){archived=archData;localStorage.setItem('idhf-archived',JSON.stringify(archived));}
-      const pData=await fbGet('profiles');
-      if(pData){profiles=pData;localStorage.setItem('idhf-profiles',JSON.stringify(profiles));}
-      const pyData=await fbGet('payments');
-      if(pyData){payments=pyData;localStorage.setItem('idhf-payments',JSON.stringify(payments));}
-      refreshCurrentTab();
-      updateMineBadge();updateCommPendingAlert();
-      setSyncStatus('● Live','#5a9a5a');
-    }catch(e){setSyncStatus('⚠ Offline','#c0392b');}
-  },8000);
+  if(_pollSlowInterval)clearInterval(_pollSlowInterval);
+  pollFast(); // immediate first run
+  _pollInterval=setInterval(pollFast,4000);      // critical: every 4s
+  _pollSlowInterval=setInterval(pollSlow,30000); // non-critical: every 30s
 }
 
 const IHL=[
@@ -2104,16 +2130,16 @@ async function initFirebase(){
     const pData=await fbGet('profiles');if(pData){profiles=pData;localStorage.setItem('idhf-profiles',JSON.stringify(profiles));}
     const pyData=await fbGet('payments');if(pyData){payments=pyData;localStorage.setItem('idhf-payments',JSON.stringify(payments));}
     const cancelData=await fbGet('cancellations');
-    if(cancelData){
+    if(cancelData&&typeof cancelData==='object'){
       cancellations={};
-      Object.keys(cancelData).forEach(k=>{if(cancelData[k].seen===false)cancellations[k]=cancelData[k];});
+      Object.keys(cancelData).forEach(k=>{if(cancelData[k]&&cancelData[k].seen===false)cancellations[k]=cancelData[k];});
       Object.keys(cancellations).forEach(k=>{if(approved[k]===cancellations[k].refName)delete approved[k];});
       localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));
     }
     const cancelScData=await fbGet('cancellationsScorer');
-    if(cancelScData){
+    if(cancelScData&&typeof cancelScData==='object'){
       cancellationsScorer={};
-      Object.keys(cancelScData).forEach(k=>{if(cancelScData[k].seen===false)cancellationsScorer[k]=cancelScData[k];});
+      Object.keys(cancelScData).forEach(k=>{if(cancelScData[k]&&cancelScData[k].seen===false)cancellationsScorer[k]=cancelScData[k];});
       Object.keys(cancellationsScorer).forEach(k=>{if(approvedScorer[k]===cancellationsScorer[k].refName)delete approvedScorer[k];});
       localStorage.setItem('idhf-cancels-sc',JSON.stringify(cancellationsScorer));
     }
