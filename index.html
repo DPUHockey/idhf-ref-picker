@@ -10,51 +10,36 @@
 <meta name="theme-color" content="#0f1f3d">
 <title>IDHF Ref Game Picker</title>
 <script>
-// ── SERVICE WORKER — auto-update, no version number needed ────────────────
-if('serviceWorker' in navigator){
-  const swCode = `
-self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
-
-self.addEventListener('fetch', e => {
-  if(e.request.method !== 'GET') return;
-  // Network-first: always try fresh, fall back to cache
-  e.respondWith(
-    fetch(e.request).then(res => {
-      if(res && res.status === 200){
-        caches.open('idhf-v1').then(c => c.put(e.request, res.clone()));
-      }
-      return res;
-    }).catch(() => caches.match(e.request))
-  );
-});
-`;
-  const blob = new Blob([swCode], {type:'application/javascript'});
-  navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
-
-  // On every open/return-to-app, fetch index.html and compare ETag/Last-Modified
-  // If server has a newer version, reload silently
+// ── AUTO-UPDATE — works on iOS home screen apps ───────────────────────────
+(function(){
   function checkForUpdate(){
-    fetch(location.href, {method:'HEAD', cache:'no-cache'}).then(res => {
-      const etag = res.headers.get('etag') || res.headers.get('last-modified') || '';
-      const stored = sessionStorage.getItem('idhf-etag');
-      if(stored && etag && stored !== etag){
-        sessionStorage.setItem('idhf-etag', etag);
-        const b = document.getElementById('copy-banner');
-        if(b){b.textContent='🔄 New version — updating…';b.classList.add('show');}
-        setTimeout(() => location.reload(true), 1200);
-      } else if(etag){
-        sessionStorage.setItem('idhf-etag', etag);
+    fetch(location.href+'?_='+Date.now(), {method:'HEAD', cache:'no-cache'})
+    .then(res => {
+      const etag=(res.headers.get('etag')||res.headers.get('last-modified')||'').trim();
+      if(!etag)return;
+      const stored=localStorage.getItem('idhf-etag');
+      if(stored && stored!==etag){
+        // New version detected — show banner then navigate (works on iOS PWA)
+        localStorage.setItem('idhf-etag',etag);
+        const b=document.getElementById('copy-banner');
+        if(b){b.textContent='🔄 Update available — reloading…';b.classList.add('show');}
+        setTimeout(()=>{ window.location.href=location.pathname+'?bust='+Date.now(); },1500);
+      } else {
+        localStorage.setItem('idhf-etag',etag);
       }
     }).catch(()=>{});
   }
-
-  // Check on load and every time user returns to the tab/app
-  window.addEventListener('load', () => setTimeout(checkForUpdate, 2000));
-  document.addEventListener('visibilitychange', () => {
-    if(document.visibilityState === 'visible') checkForUpdate();
+  // Check 3s after load (let app boot first)
+  window.addEventListener('load',()=>setTimeout(checkForUpdate,3000));
+  // Check every time user returns to the app (tab focus / iOS resume)
+  document.addEventListener('visibilitychange',()=>{
+    if(document.visibilityState==='visible')setTimeout(checkForUpdate,500);
   });
-}
+  window.addEventListener('pageshow',e=>{
+    // iOS fires pageshow with persisted=true when returning from background
+    if(e.persisted)setTimeout(checkForUpdate,500);
+  });
+})();
 </script>
 <style>
   :root {
