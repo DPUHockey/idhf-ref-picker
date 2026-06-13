@@ -730,7 +730,7 @@ function render(){
           availHtml+='<div class="avail-item">';
           if(isChosen)availHtml+='<span class="assigned-star">★</span>';
           availHtml+='<span class="avail-name'+(isChosen?' is-assigned':'')+'">'+name+'</span>';
-          if(commMode&&!isChosen&&!isApproved)availHtml+='<button class="comm-pick-btn" data-key="'+sk+'" data-name="'+sn+'" onclick="approveRef(this)">Assign</button>';
+          if(commMode&&!isChosen&&(po?(avail.filter(n=>approved[key]===n).length<2):!isApproved))availHtml+='<button class="comm-pick-btn" data-key="'+sk+'" data-name="'+sn+'" onclick="approveRef(this)">Assign</button>';
           if(commMode&&isChosen)availHtml+='<button class="comm-undo-btn" data-key="'+sk+'" onclick="unapproveRef(this)">↺ Undo</button>';
           if(!isApproved&&!commMode&&name===official)availHtml+='<button class="avail-remove-btn" data-key="'+sk+'" data-name="'+sn+'" onclick="removeAvail(event,this)">✕</button>';
           availHtml+='</div>';
@@ -739,12 +739,10 @@ function render(){
       }
       let actionHtml='';
       const maxRefs=po?2:1;
-      const refsFull=avail.length>=maxRefs&&!iAmAvail;
       if(isMine)actionHtml='<span class="got-it-badge">🎉 You got it!</span>';
       else if(isApproved&&!isMine)actionHtml='<span class="assigned-label">✓ '+appName+'</span>';
-      else if(official&&!iAmAvail&&!refsFull)actionHtml='<button class="mark-avail-btn" data-key="'+encodeURIComponent(key)+'" onclick="markAvail(this)">I\'m Available</button>';
+      else if(official&&!iAmAvail)actionHtml='<button class="mark-avail-btn" data-key="'+encodeURIComponent(key)+'" onclick="markAvail(this)">I\'m Available</button>';
       else if(iAmAvail)actionHtml='<span class="already-avail">✓ Available</span>';
-      else if(refsFull&&!isApproved)actionHtml='<span style="font-size:11px;color:var(--muted);font-style:italic;">Full</span>';
       html+='<div class="game-row '+rowClass+'"><div class="game-time">'+g.time+'</div><div class="game-info"><div class="game-matchup">'+g.away+' vs '+g.home+(po?'<span class="playoff-tag">PLAYOFF</span>':'')+(needsRef?'<span class="needs-ref-tag">🔴 Needs Ref!</span>':'')+'</div><div class="game-meta">Inwood Ice Arena</div>'+availHtml+'</div><div class="game-action">'+actionHtml+'</div></div>';
     });
   });
