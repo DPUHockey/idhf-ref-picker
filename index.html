@@ -1412,14 +1412,15 @@ function renderMyGames(){
     html+='<div class="my-game-matchup">'+g.away+' vs '+g.home+'</div>';
     const hasCancelled=isRef&&cancellations[key]&&cancellations[key].refName===official&&cancellations[key].seen===false;
     const hasCancelledScorer=!isRef&&cancellationsScorer[key]&&cancellationsScorer[key].refName===official&&cancellationsScorer[key].seen===false;
-    html+='<div class="my-game-row-bot"><span class="my-game-arena">Inwood Ice Arena</span><div style="display:flex;gap:6px;align-items:center;">';
-    if(hasCancelled){
+    html+='<div class="my-game-row-bot"><span class="my-game-arena">Inwood Ice Arena</span><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">';
+    // Show a "pending" notice if one exists, but ALWAYS also show the Cancel button —
+    // clicking it simply re-records/overwrites the cancellation, so it can never get stuck.
+    if(hasCancelled||hasCancelledScorer){
       html+='<span style="font-size:11px;font-weight:700;color:#e08800;background:#fff8e6;border:1px solid #f0d080;border-radius:4px;padding:4px 8px;white-space:nowrap;">⏳ Cancellation pending</span>';
-    } else if(hasCancelledScorer){
-      html+='<span style="font-size:11px;font-weight:700;color:#e08800;background:#fff8e6;border:1px solid #f0d080;border-radius:4px;padding:4px 8px;white-space:nowrap;">⏳ Cancellation pending</span>';
-    } else if(!isPastGame&&isRef){
+    }
+    if(isRef){
       html+='<button class="cancel-game-btn" onclick="openCancelGame(\''+sk+'\')">✖ Cancel</button>';
-    } else if(!isPastGame&&!isRef){
+    } else {
       html+='<button class="cancel-game-btn" onclick="openCancelScorerGame(\''+sk+'\')">✖ Cancel</button>';
     }
     if(!done){
