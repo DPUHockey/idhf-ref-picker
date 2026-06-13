@@ -1,5 +1,4 @@
 
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1018,6 +1017,17 @@ const MS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec
 const ML=['January','February','March','April','May','June','July','August','September','October','November','December'];
 function formatDateHeader(iso){const[y,m,d]=iso.split('-').map(Number);return DAYS[new Date(y,m-1,d).getDay()]+'  '+MS[m-1]+' '+d;}
 function isPast(iso){const[y,m,d]=iso.split('-').map(Number);const t=new Date();t.setHours(0,0,0,0);return new Date(y,m-1,d)<t;}
+// A cancelled/orphaned game is "urgent" if it's within 7 days (including past games);
+// games further out aren't pressing yet and don't need to clutter the Pending tab.
+// If the game can't be found (orphaned key), always treat as urgent so it doesn't get lost.
+function isUrgent(g){
+  if(!g)return true;
+  const[y,m,d]=g.date.split('-').map(Number);
+  const gameDate=new Date(y,m-1,d);gameDate.setHours(0,0,0,0);
+  const today=new Date();today.setHours(0,0,0,0);
+  const diffDays=Math.round((gameDate-today)/86400000);
+  return diffDays<=7;
+}
 function upcomingOnly(games){return games.filter(g=>!isPast(g.date));}
 function todayStr(){const n=new Date();return n.getFullYear()+'-'+String(n.getMonth()+1).padStart(2,'0')+'-'+String(n.getDate()).padStart(2,'0');}
 function isGameComplete(g){const k=gameKey(g.league,g);return completedOverrides[k]===true;}
@@ -1598,9 +1608,9 @@ function countPendingTotal(){
   const ag=allGames();
   const pendingRef=ag.filter(g=>{const k=gameKey(g.league,g);return(availability[k]||[]).length>0&&!approved[k]&&!isPast(g.date);}).length;
   const pendingScorer=ag.filter(g=>{const k=gameKey(g.league,g);return(availabilityScorer[k]||[]).length>0&&!approvedScorer[k]&&!isPast(g.date);}).length;
-  const cancelRef=Object.values(cancellations).filter(c=>c&&c.seen===false).length;
-  const cancelScorer=Object.values(cancellationsScorer).filter(c=>c&&c.seen===false).length;
-  const nrGames=Object.keys(needsReplacement).map(key=>{const g=ag.find(g=>gameKey(g.league,g)===key);return{key,g};}).filter(x=>x.g&&!isPast(x.g.date)&&!approved[x.key]).length;
+  const cancelRef=Object.keys(cancellations).filter(key=>{const c=cancellations[key];if(!c||c.seen!==false)return false;const g=ag.find(g=>gameKey(g.league,g)===key);return isUrgent(g);}).length;
+  const cancelScorer=Object.keys(cancellationsScorer).filter(key=>{const c=cancellationsScorer[key];if(!c||c.seen!==false)return false;const g=ag.find(g=>gameKey(g.league,g)===key);return isUrgent(g);}).length;
+  const nrGames=Object.keys(needsReplacement).map(key=>{const g=ag.find(g=>gameKey(g.league,g)===key);return{key,g};}).filter(x=>x.g&&!isPast(x.g.date)&&!approved[x.key]&&isUrgent(x.g)).length;
   return nrGames+cancelRef+cancelScorer+pendingRef+pendingScorer;
 }
 
@@ -1611,20 +1621,20 @@ function buildPendingHtml(){
   const pendingRef=ag.filter(g=>{const k=gameKey(g.league,g);return(availability[k]||[]).length>0&&!approved[k]&&!isPast(g.date);}).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
   // Scorer pending assignments
   const pendingScorer=ag.filter(g=>{const k=gameKey(g.league,g);return(availabilityScorer[k]||[]).length>0&&!approvedScorer[k]&&!isPast(g.date);}).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
-  // Ref cancellations — show ALL, even if game lookup fails (orphaned keys)
+  // Ref cancellations — show ALL, even if game lookup fails (orphaned keys); only urgent (within 7 days)
   const cancelRef=Object.keys(cancellations).map(key=>{
     const c=cancellations[key];
     const g=ag.find(g=>gameKey(g.league,g)===key);
     return{key,c,g};
-  }).filter(x=>x.c&&x.c.seen===false).sort((a,b)=>(b.c.timestamp||0)-(a.c.timestamp||0));
-  // Scorer cancellations
+  }).filter(x=>x.c&&x.c.seen===false&&isUrgent(x.g)).sort((a,b)=>(b.c.timestamp||0)-(a.c.timestamp||0));
+  // Scorer cancellations — only urgent (within 7 days)
   const cancelScorer=Object.keys(cancellationsScorer).map(key=>{
     const c=cancellationsScorer[key];
     const g=ag.find(g=>gameKey(g.league,g)===key);
     return{key,c,g};
-  }).filter(x=>x.c&&x.c.seen===false).sort((a,b)=>(b.c.timestamp||0)-(a.c.timestamp||0));
-  // Needs replacement
-  const nrGames=Object.keys(needsReplacement).map(key=>{const g=ag.find(g=>gameKey(g.league,g)===key);return{key,g};}).filter(x=>x.g&&!isPast(x.g.date)&&!approved[x.key]);
+  }).filter(x=>x.c&&x.c.seen===false&&isUrgent(x.g)).sort((a,b)=>(b.c.timestamp||0)-(a.c.timestamp||0));
+  // Needs replacement — only urgent (within 7 days)
+  const nrGames=Object.keys(needsReplacement).map(key=>{const g=ag.find(g=>gameKey(g.league,g)===key);return{key,g};}).filter(x=>x.g&&!isPast(x.g.date)&&!approved[x.key]&&isUrgent(x.g));
   const parts=[];
   if(nrGames.length)parts.push(nrGames.length+' need replacement');
   if(cancelRef.length)parts.push(cancelRef.length+' ref cancel'+(cancelRef.length>1?'s':''));
