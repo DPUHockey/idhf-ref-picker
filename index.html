@@ -114,10 +114,15 @@
   .cal-legend{padding:10px 14px;display:flex;gap:10px;flex-wrap:wrap;border-top:1px solid var(--border);background:#fafcff;}
   .cal-legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted);}
   .cal-legend-dot{width:10px;height:10px;border-radius:2px;flex-shrink:0;}
-  .my-game-row{display:flex;flex-direction:column;padding:12px 14px;border-bottom:1px solid #f0dde0;gap:4px;}
+  .my-game-row{display:grid;grid-template-columns:1fr auto;grid-template-rows:auto;column-gap:10px;padding:12px 14px;border-bottom:1px solid #f0dde0;position:relative;overflow:hidden;align-items:center;}
   .my-game-row:last-child{border-bottom:none;}
   .my-game-row.today-game{background:#fff0f2;border-left:4px solid var(--maroon);}
   .my-game-row.done-game{background:#f0faf0;border-left:4px solid #1a7a3c;}
+  .my-game-row-content{display:flex;flex-direction:column;gap:4px;min-width:0;}
+  .my-game-row-logo{width:40px;height:40px;border-radius:50%;object-fit:cover;opacity:0.22;flex-shrink:0;grid-row:1/3;}
+  /* Ref stripe watermark */
+  .my-game-row.ref-stripe::before{content:'';position:absolute;inset:0;background:repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(0,0,0,0.025) 8px,rgba(0,0,0,0.025) 16px);pointer-events:none;z-index:0;}
+  .my-game-row > *{position:relative;z-index:1;}
   .my-game-row-top{display:flex;align-items:center;gap:7px;flex-wrap:nowrap;}
   .my-game-date{font-size:12px;font-weight:700;color:var(--dark);white-space:nowrap;flex-shrink:0;}
   .my-game-time{font-size:12px;color:var(--maroon);font-weight:700;white-space:nowrap;flex-shrink:0;}
@@ -401,6 +406,20 @@
   </div>
 </div>
 
+<div class="modal-overlay" id="cancelScorerModal">
+  <div class="modal">
+    <h3 style="color:#c0392b">⚠ Cancel Scorekeeper Assignment?</h3>
+    <p id="cancelScorerDesc" style="font-weight:600;color:var(--dark);margin-bottom:8px;"></p>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:12px;">The commissioner will be notified. You will be removed from this game.</p>
+    <input class="text-input" id="cancelScorerReason" type="text" placeholder="Reason (optional)" autocomplete="off" style="margin-bottom:6px;">
+    <div class="pin-error" id="cancelScorerError"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal('cancelScorerModal')">Keep It</button>
+      <button class="btn-primary" style="background:#c0392b" onclick="confirmCancelScorerGame()">Yes, Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="deleteRefModal">
   <div class="modal">
     <h3 style="color:#c0392b">📦 Archive Ref?</h3>
@@ -582,7 +601,7 @@
 
   <!-- Mode Switcher -->
   <div class="mode-switcher">
-    <button class="mode-btn ref-mode active" id="refModeBtn" onclick="switchToRefMode()">👤 Ref Mode</button>
+    <button class="mode-btn ref-mode active" id="refModeBtn" onclick="switchToRefMode()">🏒 Officials Mode</button>
     <button class="mode-btn comm-mode" id="commModeBtn" onclick="switchToCommMode()">🏒 Commissioner</button>
     <span id="sync-status" style="font-size:10px;color:#7a9ab0;white-space:nowrap;margin-left:4px;"></span>
   </div>
@@ -739,12 +758,17 @@ function startPolling(){
       if(cScData){completedScorer=cScData;localStorage.setItem('idhf-completed-sc',JSON.stringify(completedScorer));}
       const cancelData=await fbGet('cancellations');
       if(cancelData){
-        // Strip out any already-acknowledged (seen:true) entries
         cancellations={};
         Object.keys(cancelData).forEach(k=>{if(cancelData[k].seen===false)cancellations[k]=cancelData[k];});
-        // Also ensure approved doesn't still show a ref who cancelled
         Object.keys(cancellations).forEach(k=>{if(approved[k]===cancellations[k].refName)delete approved[k];});
         localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));
+      }
+      const cancelScData=await fbGet('cancellationsScorer');
+      if(cancelScData){
+        cancellationsScorer={};
+        Object.keys(cancelScData).forEach(k=>{if(cancelScData[k].seen===false)cancellationsScorer[k]=cancelScData[k];});
+        Object.keys(cancellationsScorer).forEach(k=>{if(approvedScorer[k]===cancellationsScorer[k].refName)delete approvedScorer[k];});
+        localStorage.setItem('idhf-cancels-sc',JSON.stringify(cancellationsScorer));
       }
       const nrData=await fbGet('needsReplacement');
       if(nrData){needsReplacement=nrData;localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));}
@@ -844,6 +868,9 @@ let cancellations=JSON.parse(localStorage.getItem('idhf-cancels')||'{}');
 Object.keys(cancellations).forEach(k=>{if(cancellations[k].seen!==false)delete cancellations[k];});
 // Ensure approved doesn't still show a ref who cancelled
 Object.keys(cancellations).forEach(k=>{if(approved[k]===cancellations[k].refName)delete approved[k];});
+let cancellationsScorer=JSON.parse(localStorage.getItem('idhf-cancels-sc')||'{}');
+Object.keys(cancellationsScorer).forEach(k=>{if(cancellationsScorer[k].seen!==false)delete cancellationsScorer[k];});
+Object.keys(cancellationsScorer).forEach(k=>{if(approvedScorer[k]===cancellationsScorer[k].refName)delete approvedScorer[k];});
 let needsReplacement=JSON.parse(localStorage.getItem('idhf-needs-replace')||'{}');
 let _profileUnlocked=null,_pendingDeleteRef=null,_pendingPayoutRef=null,_pendingCancelKey=null,_editingRefName=null;
 let archived=JSON.parse(localStorage.getItem('idhf-archived')||'{}');
@@ -869,10 +896,12 @@ async function saveOfficials(){localStorage.setItem('idhf-officials',JSON.string
 async function saveProfiles(){localStorage.setItem('idhf-profiles',JSON.stringify(profiles));try{await fbSet('profiles',profiles);}catch(e){}}
 async function savePayments(){localStorage.setItem('idhf-payments',JSON.stringify(payments));try{await fbSet('payments',payments);}catch(e){}}
 async function saveCancellations(){localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));try{await fbSet('cancellations',cancellations);}catch(e){}}
+async function saveCancellationsScorer(){localStorage.setItem('idhf-cancels-sc',JSON.stringify(cancellationsScorer));try{await fbSet('cancellationsScorer',cancellationsScorer);}catch(e){}}
 async function saveArchived(){localStorage.setItem('idhf-archived',JSON.stringify(archived));try{await fbSet('archived',archived);}catch(e){}}
 
 function gameKey(league,g){return league+'|'+g.date+'|'+g.time+'|'+g.away+'|'+g.home;}
 function selectedOfficial(){return document.getElementById('officialSelect').value;}
+function leagueLogo(league){const img=document.querySelector('header img[alt="'+(league==='ihl'?'IHL':'FHL')+'"]');return img?img.src:'';}
 const DAYS=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const ML=['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -1085,10 +1114,11 @@ function lockComm(){
 function openReset(){document.getElementById('resetModal').classList.add('show');}
 async function confirmReset(){
   availability={};approved={};completedOverrides={};cancellations={};needsReplacement={};
-  availabilityScorer={};approvedScorer={};completedScorer={};
+  availabilityScorer={};approvedScorer={};completedScorer={};cancellationsScorer={};
   localStorage.setItem('idhf-avail-sc',JSON.stringify(availabilityScorer));
   localStorage.setItem('idhf-approved-sc',JSON.stringify(approvedScorer));
   localStorage.setItem('idhf-completed-sc',JSON.stringify(completedScorer));
+  localStorage.setItem('idhf-cancels-sc',JSON.stringify(cancellationsScorer));
   localStorage.setItem('idhf-avail',JSON.stringify(availability));
   localStorage.setItem('idhf-approved',JSON.stringify(approved));
   localStorage.setItem('idhf-completed',JSON.stringify(completedOverrides));
@@ -1221,7 +1251,8 @@ function renderMyGames(){
     let payUnlocked=false;
     if(tmatch){let hr=parseInt(tmatch[1]),mn=parseInt(tmatch[2]),ap=tmatch[3].toUpperCase();if(ap==='PM'&&hr!==12)hr+=12;if(ap==='AM'&&hr===12)hr=0;payUnlocked=Date.now()>=new Date(y,m-1,d,hr,mn,0).getTime()+3600000;}
 
-    html+='<div class="my-game-row'+(isToday?' today-game':'')+(done?' done-game':'')+'"><div class="my-game-row-top">';
+    html+='<div class="my-game-row'+(isRef?' ref-stripe':'')+(isToday?' today-game':'')+(done?' done-game':'')+'"><div class="my-game-row-content">';
+    html+='<div class="my-game-row-top">';
     if(isToday)html+='<span class="today-badge">TODAY</span>';
     if(done)html+='<span class="today-badge" style="background:#1a7a3c;">✓ PAID</span>';
     html+='<span class="my-game-date">'+ds+'</span><span style="color:var(--muted);font-size:11px;">·</span><span class="my-game-time">'+g.time+'</span>';
@@ -1229,11 +1260,16 @@ function renderMyGames(){
     html+='<span style="font-size:9px;font-weight:700;background:'+roleColor+';color:#fff;border-radius:3px;padding:2px 5px;">'+roleTag+'</span></div>';
     html+='<div class="my-game-matchup">'+g.away+' vs '+g.home+'</div>';
     const hasCancelled=isRef&&cancellations[key]&&cancellations[key].refName===official&&cancellations[key].seen===false;
+    const hasCancelledScorer=!isRef&&cancellationsScorer[key]&&cancellationsScorer[key].refName===official&&cancellationsScorer[key].seen===false;
     html+='<div class="my-game-row-bot"><span class="my-game-arena">Inwood Ice Arena</span><div style="display:flex;gap:6px;align-items:center;">';
     if(hasCancelled){
       html+='<span style="font-size:11px;font-weight:700;color:#e08800;background:#fff8e6;border:1px solid #f0d080;border-radius:4px;padding:4px 8px;white-space:nowrap;">⏳ Cancellation pending</span>';
+    } else if(hasCancelledScorer){
+      html+='<span style="font-size:11px;font-weight:700;color:#e08800;background:#fff8e6;border:1px solid #f0d080;border-radius:4px;padding:4px 8px;white-space:nowrap;">⏳ Cancellation pending</span>';
     } else if(!isPastGame&&!done&&isRef){
       html+='<button class="cancel-game-btn" data-cancel-key="'+sk+'">✖ Cancel</button>';
+    } else if(!isPastGame&&!done&&!isRef){
+      html+='<button class="cancel-game-btn" data-cancel-scorer-key="'+sk+'">✖ Cancel</button>';
     }
     if(!done){
       if(payUnlocked){
@@ -1246,10 +1282,15 @@ function renderMyGames(){
       const fn=isRef?'refMarkUndone':'scorerMarkUndone';
       html+='<button class="override-btn" onclick="'+fn+'(\''+sk+'\')">↺ Undo</button>';
     }
-    html+='</div></div></div>';
+    const logoSrc=leagueLogo(g.league);
+    const logoHtml=logoSrc?'<img class="my-game-row-logo" src="'+logoSrc+'" alt="'+g.league.toUpperCase()+'">':'';
+    html+='</div></div>'+logoHtml+'</div>'; // close bot, close content, logo, close row
   });
   document.getElementById('mine-list').innerHTML=html;
-  document.getElementById('mine-list').addEventListener('click',function(e){const btn=e.target.closest('[data-cancel-key]');if(btn)openCancelGame(btn.dataset.cancelKey);},{once:true});
+  document.getElementById('mine-list').addEventListener('click',function(e){
+    const rbtn=e.target.closest('[data-cancel-key]');if(rbtn)openCancelGame(rbtn.dataset.cancelKey);
+    const sbtn=e.target.closest('[data-cancel-scorer-key]');if(sbtn)openCancelScorerGame(sbtn.dataset.cancelScorerKey);
+  },{once:true});
 }
 
 function updateMineBadge(){
@@ -1257,7 +1298,7 @@ function updateMineBadge(){
   const badge=document.getElementById('badge-mine');
   if(!badge)return;
   if(commMode){
-    const count=Object.values(cancellations).filter(c=>c.seen===false).length;
+    const count=Object.values(cancellations).filter(c=>c.seen===false).length+Object.values(cancellationsScorer).filter(c=>c.seen===false).length;
     badge.textContent=count;
     badge.style.display=count>0?'':'none';
     if(count>0)badge.classList.add('badge-cancel');else badge.classList.remove('badge-cancel');
@@ -1265,11 +1306,10 @@ function updateMineBadge(){
   }
   const official=selectedOfficial();
   if(!official){badge.textContent='';badge.style.display='none';return;}
-  const count=allGames().filter(g=>approved[gameKey(g.league,g)]===official).length;
+  const count=allGames().filter(g=>{const k=gameKey(g.league,g);return approved[k]===official||approvedScorer[k]===official;}).length;
   badge.textContent=count;
   badge.style.display=count>0?'':'none';
   badge.classList.remove('badge-cancel');
-  // Also update done badge
   updateDoneBadge();
 }
 
@@ -1447,7 +1487,7 @@ function updateCommPendingAlert(){
   const palert=document.getElementById('comm-pending-alert');
   const pcount=document.getElementById('comm-pending-count');
   if(palert&&pcount){pcount.textContent=pending;palert.style.display=pending>0?'':'none';}
-  const cancels=Object.values(cancellations).filter(c=>c.seen===false).length;
+  const cancels=(Object.values(cancellations).filter(c=>c.seen===false).length)+(Object.values(cancellationsScorer).filter(c=>c.seen===false).length);
   const calert=document.getElementById('comm-cancel-alert');
   const ccount=document.getElementById('comm-cancel-count');
   const cplural=document.getElementById('comm-cancel-plural');
@@ -1456,66 +1496,122 @@ function updateCommPendingAlert(){
 function renderPending(){
   updateCommPendingAlert();
   const ag=allGames();
-  const pendingGames=ag.filter(g=>{const k=gameKey(g.league,g);return(availability[k]||[]).length>0&&!approved[k]&&!isPast(g.date);}).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
-  const cancelList=Object.keys(cancellations).map(key=>{const c=cancellations[key],g=ag.find(g=>gameKey(g.league,g)===key);return{key,c,g};}).filter(x=>x.g&&x.c.seen===false).sort((a,b)=>(b.c.timestamp||0)-(a.c.timestamp||0));
+  // Ref pending assignments (availability but no approved)
+  const pendingRef=ag.filter(g=>{const k=gameKey(g.league,g);return(availability[k]||[]).length>0&&!approved[k]&&!isPast(g.date);}).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+  // Scorer pending assignments
+  const pendingScorer=ag.filter(g=>{const k=gameKey(g.league,g);return(availabilityScorer[k]||[]).length>0&&!approvedScorer[k]&&!isPast(g.date);}).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+  // Ref cancellations
+  const cancelRef=Object.keys(cancellations).map(key=>{const c=cancellations[key],g=ag.find(g=>gameKey(g.league,g)===key);return{key,c,g};}).filter(x=>x.g&&x.c.seen===false).sort((a,b)=>(b.c.timestamp||0)-(a.c.timestamp||0));
+  // Scorer cancellations
+  const cancelScorer=Object.keys(cancellationsScorer).map(key=>{const c=cancellationsScorer[key],g=ag.find(g=>gameKey(g.league,g)===key);return{key,c,g};}).filter(x=>x.g&&x.c.seen===false).sort((a,b)=>(b.c.timestamp||0)-(a.c.timestamp||0));
+  // Needs replacement
   const nrGames=Object.keys(needsReplacement).map(key=>{const g=ag.find(g=>gameKey(g.league,g)===key);return{key,g};}).filter(x=>x.g&&!isPast(x.g.date)&&!approved[x.key]);
   const el=document.getElementById('pending-list');
   const parts=[];
-  if(nrGames.length)parts.push(nrGames.length+' need'+(nrGames.length>1?'':'s')+' replacement');
-  if(cancelList.length)parts.push(cancelList.length+' cancellation'+(cancelList.length>1?'s':''));
-  if(pendingGames.length)parts.push(pendingGames.length+' waiting');
-  document.getElementById('pending-count').textContent=parts.join(' · ');
-  if(!cancelList.length&&!pendingGames.length&&!nrGames.length){el.innerHTML='<div class="no-games-msg">No games pending assignment.</div>';return;}
+  if(nrGames.length)parts.push(nrGames.length+' need replacement');
+  if(cancelRef.length)parts.push(cancelRef.length+' ref cancel'+(cancelRef.length>1?'s':''));
+  if(cancelScorer.length)parts.push(cancelScorer.length+' scorer cancel'+(cancelScorer.length>1?'s':''));
+  if(pendingRef.length)parts.push(pendingRef.length+' ref pending');
+  if(pendingScorer.length)parts.push(pendingScorer.length+' scorer pending');
+  document.getElementById('pending-count').textContent=parts.join(' · ')||'All clear';
+  const total=nrGames.length+cancelRef.length+cancelScorer.length+pendingRef.length+pendingScorer.length;
+  if(!total){el.innerHTML='<div class="no-games-msg">No games pending assignment.</div>';return;}
   let html='';
-  // Needs replacement — top priority
+
+  // ── NEEDS REPLACEMENT ──
   if(nrGames.length){
     html+='<div class="cancellation-section-header" style="background:#e08800;">🔴 Needs Replacement — '+nrGames.length+' game'+(nrGames.length>1?'s':'')+' open</div>';
     nrGames.forEach(({key,g})=>{
       const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
       const avail=availability[key]||[],sk=encodeURIComponent(key);
-      html+='<div style="background:#fff8e6;border-left:4px solid #e08800;padding:11px 14px;border-bottom:1px solid #f0d080;">';
+      const leagueTab=g.league;
+      html+='<div style="background:#fff8e6;border-left:4px solid #e08800;padding:11px 14px;border-bottom:1px solid #f0d080;cursor:pointer;" onclick="switchTab(\''+leagueTab+'\')">';
+      html+='<div style="font-size:10px;font-weight:700;color:#e08800;margin-bottom:4px;">🏒 REFEREE NEEDED</div>';
       html+='<div style="font-size:13px;font-weight:600;color:var(--dark);">'+g.away+' vs '+g.home+'</div>';
       html+='<div style="font-size:11px;color:var(--muted);margin-top:2px;">'+ds+' · '+g.time+' · '+g.league.toUpperCase()+'</div>';
-      if(avail.length){html+='<div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">';avail.forEach(name=>{const sn=encodeURIComponent(name);html+='<div style="display:flex;align-items:center;gap:6px;font-size:12px;"><span style="font-weight:600;">'+name+'</span><button class="comm-pick-btn" data-key="'+sk+'" data-name="'+sn+'" onclick="approveRefNR(this)">✓ Assign</button></div>';});html+='</div>';}
-      else html+='<div style="font-size:12px;color:var(--muted);margin-top:6px;font-style:italic;">No refs available yet — mark your availability on the schedule.</div>';
+      if(avail.length){html+='<div style="margin-top:8px;display:flex;flex-direction:column;gap:4px;">';avail.forEach(name=>{const sn=encodeURIComponent(name);html+='<div style="display:flex;align-items:center;gap:6px;font-size:12px;" onclick="event.stopPropagation()"><span style="font-weight:600;">'+name+'</span><button class="comm-pick-btn" data-key="'+sk+'" data-name="'+sn+'" onclick="approveRefNR(this)">✓ Assign</button></div>';});html+='</div>';}
+      else html+='<div style="font-size:12px;color:var(--muted);margin-top:6px;font-style:italic;">No refs available yet.</div>';
       html+='</div>';
     });
   }
-  if(cancelList.length){
-    html+='<div class="cancellation-section-header">⚠ Cancellations — '+cancelList.length+' ref'+(cancelList.length>1?'s':'')+' cancelled</div>';
-    cancelList.forEach(({key,c,g})=>{
+
+  // ── REF CANCELLATIONS ──
+  if(cancelRef.length){
+    html+='<div class="cancellation-section-header">🏒 Ref Cancellations — '+cancelRef.length+'</div>';
+    cancelRef.forEach(({key,c,g})=>{
       const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d,sk=encodeURIComponent(key),ts=c.timestamp?new Date(c.timestamp).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
-      html+='<div class="cancellation-row"><div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;"><span style="font-weight:700;color:#c0392b;">✖ '+c.refName+' cancelled</span><span style="font-size:10px;color:var(--muted);">'+ts+'</span></div>';
+      html+='<div class="cancellation-row" style="cursor:pointer;" onclick="switchTab(\''+g.league+'\')">';
+      html+='<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;"><span style="font-weight:700;color:#c0392b;">🏒 ✖ '+c.refName+' (Ref) cancelled</span><span style="font-size:10px;color:var(--muted);">'+ts+'</span></div>';
       html+='<div style="font-size:13px;font-weight:600;color:var(--dark);margin-top:2px;">'+g.away+' vs '+g.home+'</div>';
       html+='<div style="font-size:11px;color:var(--muted);">'+ds+' · '+g.time+' · '+g.league.toUpperCase()+'</div>';
       if(c.reason)html+='<div style="font-size:12px;color:#7a4040;margin-top:3px;font-style:italic;">Reason: '+c.reason+'</div>';
-      html+='<button class="comm-pick-btn" style="margin-top:8px;font-size:11px;" data-dismiss-key="'+sk+'">✓ Acknowledged</button></div>';
+      html+='<button class="comm-pick-btn" style="margin-top:8px;font-size:11px;" data-dismiss-key="'+sk+'" onclick="event.stopPropagation()">✓ Acknowledged</button></div>';
     });
   }
-  pendingGames.forEach(g=>{
-    const key=gameKey(g.league,g),avail=availability[key]||[];
-    const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
-    html+='<div class="pending-row"><span class="pending-league'+(g.league==='fhl'?' fhl':'')+'">'+g.league.toUpperCase()+'</span><div class="pending-info"><div class="pending-matchup">'+g.away+' vs '+g.home+'</div><div class="pending-meta">'+ds+' · '+g.time+'</div><div class="pending-avail">';
-    avail.forEach(name=>{const sk=encodeURIComponent(key),sn=encodeURIComponent(name);html+='<div class="pending-avail-item"><span style="font-weight:600;">'+name+'</span><button class="comm-pick-btn" data-key="'+sk+'" data-name="'+sn+'" onclick="approveRef(this);updateCommPendingAlert();setTimeout(()=>renderPending(),100)">✓ Assign</button></div>';});
-    html+='</div></div></div>';
-  });
+
+  // ── SCORER CANCELLATIONS ──
+  if(cancelScorer.length){
+    html+='<div class="cancellation-section-header" style="background:#1a5a3a;">📋 Scorer Cancellations — '+cancelScorer.length+'</div>';
+    cancelScorer.forEach(({key,c,g})=>{
+      const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d,sk=encodeURIComponent(key),ts=c.timestamp?new Date(c.timestamp).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'';
+      html+='<div class="cancellation-row" style="cursor:pointer;border-left-color:#1a5a3a;" onclick="switchTab(\''+g.league+'\')">';
+      html+='<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px;"><span style="font-weight:700;color:#1a5a3a;">📋 ✖ '+c.refName+' (Scorer) cancelled</span><span style="font-size:10px;color:var(--muted);">'+ts+'</span></div>';
+      html+='<div style="font-size:13px;font-weight:600;color:var(--dark);margin-top:2px;">'+g.away+' vs '+g.home+'</div>';
+      html+='<div style="font-size:11px;color:var(--muted);">'+ds+' · '+g.time+' · '+g.league.toUpperCase()+'</div>';
+      if(c.reason)html+='<div style="font-size:12px;color:#1a4a2a;margin-top:3px;font-style:italic;">Reason: '+c.reason+'</div>';
+      html+='<button class="comm-pick-btn" style="margin-top:8px;font-size:11px;background:#1a5a3a;border-color:#1a5a3a;" data-dismiss-scorer-key="'+sk+'" onclick="event.stopPropagation()">✓ Acknowledged</button></div>';
+    });
+  }
+
+  // ── PENDING REF ASSIGNMENTS ──
+  if(pendingRef.length){
+    html+='<div class="cancellation-section-header" style="background:#1a2f5a;">🏒 Refs Needed — '+pendingRef.length+' game'+(pendingRef.length>1?'s':'')+' waiting</div>';
+    pendingRef.forEach(g=>{
+      const key=gameKey(g.league,g),avail=availability[key]||[];
+      const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
+      html+='<div class="pending-row" style="cursor:pointer;" onclick="switchTab(\''+g.league+'\')">';
+      html+='<span class="pending-league'+(g.league==='fhl'?' fhl':'')+'">'+g.league.toUpperCase()+'</span>';
+      html+='<div class="pending-info"><div class="pending-matchup">'+g.away+' vs '+g.home+'</div><div class="pending-meta">'+ds+' · '+g.time+'</div>';
+      html+='<div class="pending-avail">';
+      avail.forEach(name=>{const sk=encodeURIComponent(key),sn=encodeURIComponent(name);html+='<div class="pending-avail-item" onclick="event.stopPropagation()"><span style="font-weight:600;">'+name+'</span><button class="comm-pick-btn" data-key="'+sk+'" data-name="'+sn+'" onclick="approveRef(this);updateCommPendingAlert();setTimeout(()=>renderPending(),100)">✓ Assign Ref</button></div>';});
+      html+='</div></div></div>';
+    });
+  }
+
+  // ── PENDING SCORER ASSIGNMENTS ──
+  if(pendingScorer.length){
+    html+='<div class="cancellation-section-header" style="background:#1a4a2a;">📋 Scorers Needed — '+pendingScorer.length+' game'+(pendingScorer.length>1?'s':'')+' waiting</div>';
+    pendingScorer.forEach(g=>{
+      const key=gameKey(g.league,g),avail=availabilityScorer[key]||[];
+      const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
+      html+='<div class="pending-row" style="cursor:pointer;border-left-color:#1a7a3c;" onclick="switchTab(\''+g.league+'\')">';
+      html+='<span class="pending-league'+(g.league==='fhl'?' fhl':'')+'" style="background:#1a7a3c;">'+g.league.toUpperCase()+'</span>';
+      html+='<div class="pending-info"><div class="pending-matchup">'+g.away+' vs '+g.home+'</div><div class="pending-meta">'+ds+' · '+g.time+'</div>';
+      html+='<div class="pending-avail">';
+      avail.forEach(name=>{const sk=encodeURIComponent(key),sn=encodeURIComponent(name);html+='<div class="pending-avail-item" onclick="event.stopPropagation()"><span style="font-weight:600;">'+name+'</span><button class="comm-pick-btn" style="background:#1a5a3a;border-color:#1a5a3a;" data-key="'+sk+'" data-name="'+sn+'" onclick="approveScorer(this);updateCommPendingAlert();setTimeout(()=>renderPending(),100)">✓ Assign Scorer</button></div>';});
+      html+='</div></div></div>';
+    });
+  }
+
   el.innerHTML=html;
-  el.addEventListener('click',function(e){const btn=e.target.closest('[data-dismiss-key]');if(btn)dismissCancellation(btn.dataset.dismissKey);},{once:true});
+  el.addEventListener('click',function(e){
+    const rb=e.target.closest('[data-dismiss-key]');if(rb)dismissCancellation(rb.dataset.dismissKey);
+    const sb=e.target.closest('[data-dismiss-scorer-key]');if(sb)dismissScorerCancellation(sb.dataset.dismissScorerKey);
+  },{once:true});
 }
+
 function dismissCancellation(ek){
   const key=decodeURIComponent(ek);
-  if(cancellations[key]){
-    needsReplacement[key]=true;
-    delete cancellations[key];
-    localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));
-    saveCancellations();
-    fbSet('needsReplacement',needsReplacement).catch(e=>{});
-  }
+  if(cancellations[key]){needsReplacement[key]=true;delete cancellations[key];localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));saveCancellations();fbSet('needsReplacement',needsReplacement).catch(e=>{});}
   updateCommPendingAlert();updateMineBadge();
-  // Refresh whichever tab is showing
   const at=document.querySelector('.tab.active');
-  if(at&&at.id==='tab-mine')renderMyGames();
-  else if(at&&(at.id==='tab-ihl'||at.id==='tab-fhl'))render();
+  if(at&&at.id==='tab-mine')renderMyGames();else renderPending();
+}
+function dismissScorerCancellation(ek){
+  const key=decodeURIComponent(ek);
+  if(cancellationsScorer[key]){delete cancellationsScorer[key];localStorage.setItem('idhf-cancels-sc',JSON.stringify(cancellationsScorer));saveCancellationsScorer();}
+  updateCommPendingAlert();updateMineBadge();
+  renderPending();
 }
 
 // ── PAYROLL ───────────────────────────────────────────────────────────────
@@ -1619,6 +1715,36 @@ async function confirmCancelGame(){
   showBanner('✖ Game cancelled — commissioner notified');
 }
 document.getElementById('cancelGameReason').addEventListener('keydown',e=>{if(e.key==='Enter')confirmCancelGame();if(e.key==='Escape')closeModal('cancelGameModal');});
+
+// ── CANCEL SCORER GAME ────────────────────────────────────────────────────
+let _pendingCancelScorerKey=null;
+function openCancelScorerGame(ek){
+  const key=decodeURIComponent(ek);_pendingCancelScorerKey=key;
+  const g=allGames().find(g=>gameKey(g.league,g)===key);if(!g)return;
+  const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
+  document.getElementById('cancelScorerDesc').textContent=g.away+' vs '+g.home+' · '+ds+' '+g.time+' ('+g.league.toUpperCase()+')';
+  document.getElementById('cancelScorerReason').value='';document.getElementById('cancelScorerError').textContent='';
+  document.getElementById('cancelScorerModal').classList.add('show');setTimeout(()=>document.getElementById('cancelScorerReason').focus(),100);
+}
+async function confirmCancelScorerGame(){
+  const key=_pendingCancelScorerKey,name=selectedOfficial(),reason=document.getElementById('cancelScorerReason').value.trim();
+  if(!key||!name)return;
+  delete approvedScorer[key];
+  if(availabilityScorer[key]){availabilityScorer[key]=availabilityScorer[key].filter(n=>n!==name);if(!availabilityScorer[key].length)delete availabilityScorer[key];}
+  cancellationsScorer[key]={refName:name,role:'scorer',reason:reason,timestamp:Date.now(),seen:false};
+  closeModal('cancelScorerModal');_pendingCancelScorerKey=null;
+  localStorage.setItem('idhf-avail-sc',JSON.stringify(availabilityScorer));
+  localStorage.setItem('idhf-approved-sc',JSON.stringify(approvedScorer));
+  localStorage.setItem('idhf-cancels-sc',JSON.stringify(cancellationsScorer));
+  try{
+    await Promise.all([fbSet('stateScorer',{availabilityScorer,approvedScorer}),fbSet('cancellationsScorer',cancellationsScorer)]);
+    setSyncStatus('✓ Synced','#5a9a5a');setTimeout(()=>setSyncStatus('● Live','#5a9a5a'),2000);
+  }catch(e){setSyncStatus('⚠ Saved locally','#c8a840');}
+  updateMineBadge();updateCommPendingAlert();
+  renderMyGames();
+  showBanner('✖ Scorer assignment cancelled — commissioner notified');
+}
+document.getElementById('cancelScorerReason').addEventListener('keydown',e=>{if(e.key==='Enter')confirmCancelScorerGame();if(e.key==='Escape')closeModal('cancelScorerModal');});
 
 // ── DELETE REF ────────────────────────────────────────────────────────────
 function openDeleteRef(en){const name=decodeURIComponent(en);_pendingDeleteRef=name;document.getElementById('deleteRefName').textContent=name;document.getElementById('deleteRefModal').classList.add('show');}
@@ -1983,6 +2109,13 @@ async function initFirebase(){
       Object.keys(cancelData).forEach(k=>{if(cancelData[k].seen===false)cancellations[k]=cancelData[k];});
       Object.keys(cancellations).forEach(k=>{if(approved[k]===cancellations[k].refName)delete approved[k];});
       localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));
+    }
+    const cancelScData=await fbGet('cancellationsScorer');
+    if(cancelScData){
+      cancellationsScorer={};
+      Object.keys(cancelScData).forEach(k=>{if(cancelScData[k].seen===false)cancellationsScorer[k]=cancelScData[k];});
+      Object.keys(cancellationsScorer).forEach(k=>{if(approvedScorer[k]===cancellationsScorer[k].refName)delete approvedScorer[k];});
+      localStorage.setItem('idhf-cancels-sc',JSON.stringify(cancellationsScorer));
     }
     const nrData=await fbGet('needsReplacement');if(nrData){needsReplacement=nrData;localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));}
     const archData=await fbGet('archived');if(archData){archived=archData;localStorage.setItem('idhf-archived',JSON.stringify(archived));}
