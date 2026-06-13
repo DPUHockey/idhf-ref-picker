@@ -1330,7 +1330,7 @@ function renderMyGames(){
     }
     const logoSrc=leagueLogo(g.league);
     const logoHtml=logoSrc?'<img class="my-game-row-logo" src="'+logoSrc+'" alt="'+g.league.toUpperCase()+'">':'';
-    html+='</div></div>'+logoHtml+'</div>'; // close bot, close content, logo, close row
+    html+='</div></div></div>'+logoHtml+'</div>'; // close buttons-div, row-bot, row-content, logo, row
   });
   document.getElementById('mine-list').innerHTML=html;
   document.getElementById('mine-list').addEventListener('click',function(e){
