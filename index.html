@@ -115,6 +115,13 @@
   .panel-header{background:var(--dark);color:#fff;padding:9px 14px;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;}
   .panel-header .range{color:var(--gold);font-weight:700;font-size:10px;}
   .date-header{background:#eef1f8;padding:7px 14px;font-size:11px;font-weight:700;color:#3a4a7a;letter-spacing:1px;text-transform:uppercase;border-top:1px solid var(--border);border-bottom:1px solid var(--border);}
+  .summary-row{display:flex;align-items:center;gap:8px;padding:9px 14px;border-bottom:1px solid #f0f2f8;font-size:12px;flex-wrap:wrap;}
+  .summary-row:last-child{border-bottom:none;}
+  .summary-time{font-weight:700;color:var(--dark);min-width:58px;flex-shrink:0;}
+  .summary-league{font-size:9px;font-weight:700;color:#fff;border-radius:3px;padding:2px 6px;flex-shrink:0;}
+  .summary-matchup{flex:1 1 160px;color:var(--dark);min-width:0;}
+  .summary-ref,.summary-scorer{font-size:11px;color:var(--dark);white-space:nowrap;flex-shrink:0;}
+  .summary-unassigned{color:#c0392b;font-style:italic;}
   .game-row{display:flex;align-items:flex-start;padding:12px 14px;border-bottom:1px solid #e8f0f5;gap:10px;}
   .game-row:last-child{border-bottom:none;}
   .game-row.has-availability{background:#fdf8ee;}
@@ -540,8 +547,8 @@
 <!-- ROLE EDITOR MODAL -->
 <div class="modal-overlay" id="roleEditorModal">
   <div class="modal" style="max-width:320px;">
-    <h3>🎽 My Roles</h3>
-    <p>Choose what you want to do this season. You can work as both.</p>
+    <h3 id="roleEditorTitle">🎽 My Roles</h3>
+    <p id="roleEditorDesc">Choose what you want to do this season. You can work as both.</p>
     <div style="display:flex;gap:10px;margin:16px 0;">
       <div id="re-role-ref" onclick="reToggleRole('ref')" style="flex:1;padding:14px 8px;border-radius:10px;text-align:center;cursor:pointer;border:2px solid #2a3a6a;background:#1a2545;color:#7a9ab0;">
         <div style="font-size:24px;">🏒</div>
@@ -712,6 +719,7 @@
     <button class="tab" id="tab-mypay" onclick="switchTab('mypay')">💵 Pay</button>
     <button class="tab" id="tab-profile" onclick="switchTab('profile')">👤 Profile</button>
     <button class="tab comm-only" id="tab-pay" onclick="switchTab('pay')" style="display:none;">💰 Payroll</button>
+    <button class="tab comm-only" id="tab-summary" onclick="switchTab('summary')" style="display:none;">📋 Summary</button>
   </div>
 
   <!-- PENDING APPROVALS -->
@@ -725,6 +733,12 @@
     <div class="panel-header"><span>Ref Payroll — $65 per game</span><span class="range" id="pay-total-label"></span></div>
     <div id="pay-list"></div>
     <div class="pay-summary" id="pay-summary"></div>
+  </div>
+
+  <!-- SUMMARY (full season, one line per game) -->
+  <div class="comm-panel" id="summary-panel">
+    <div class="panel-header"><span>📋 Season Summary</span><span class="range" id="summary-count"></span></div>
+    <div id="summary-list"></div>
   </div>
 
   <!-- PENDING / MY GAMES -->
@@ -1390,20 +1404,21 @@ function renderCal(){
 function refreshCurrentTab(){
   const at=document.querySelector('.tab.active');if(!at)return;
   const t=at.id.replace('tab-','');
-  if(t==='mine')renderMyGames();else if(t==='done')renderDoneGames();else if(t==='mypay')renderMyPay();else if(t==='pending')renderPending();else if(t==='pay')renderPayroll();else if(t==='profile')renderProfileTab();else render();
+  if(t==='mine')renderMyGames();else if(t==='done')renderDoneGames();else if(t==='mypay')renderMyPay();else if(t==='pending')renderPending();else if(t==='pay')renderPayroll();else if(t==='summary')renderSummary();else if(t==='profile')renderProfileTab();else render();
 }
 
 function switchTab(tab){
   if(tab!=='mine'&&tab!=='done'&&tab!=='mypay'&&tab!=='pending'&&tab!=='pay'&&tab!=='profile')activeLeague=tab;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   const tabEl=document.getElementById('tab-'+tab);if(tabEl)tabEl.classList.add('active');
-  const panels=['list-panel','mine-panel','done-panel','mypay-panel','pending-panel','pay-panel','profile-panel'];
+  const panels=['list-panel','mine-panel','done-panel','mypay-panel','pending-panel','pay-panel','summary-panel','profile-panel'];
   panels.forEach(id=>{const el=document.getElementById(id);if(el){el.style.display='none';el.classList.remove('active');}});
   if(tab==='mine'){document.getElementById('mine-panel').style.display='';renderMyGames();}
   else if(tab==='done'){document.getElementById('done-panel').style.display='';renderDoneGames();}
   else if(tab==='mypay'){document.getElementById('mypay-panel').classList.add('active');document.getElementById('mypay-panel').style.display='';renderMyPay();}
   else if(tab==='pending'){document.getElementById('pending-panel').classList.add('active');document.getElementById('pending-panel').style.display='';renderPending();}
   else if(tab==='pay'){document.getElementById('pay-panel').classList.add('active');document.getElementById('pay-panel').style.display='';renderPayroll();}
+  else if(tab==='summary'){document.getElementById('summary-panel').classList.add('active');document.getElementById('summary-panel').style.display='';renderSummary();}
   else if(tab==='profile'){document.getElementById('profile-panel').classList.add('active');document.getElementById('profile-panel').style.display='';renderProfileTab();}
   else{document.getElementById('list-panel').style.display='';render();}
 }
@@ -1919,6 +1934,33 @@ function renderPayroll(){
   document.getElementById('pay-summary').textContent='';
 }
 
+// ── SEASON SUMMARY (commissioner) — one line per game: date, time, league, ref, scorekeeper ──
+function renderSummary(){
+  const ag=allGames().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:a.time<b.time?-1:1);
+  document.getElementById('summary-count').textContent=ag.length+' games';
+  if(!ag.length){document.getElementById('summary-list').innerHTML='<div class="no-games-msg">No games scheduled.</div>';return;}
+  let html='',lastDate=null;
+  ag.forEach(g=>{
+    const key=gameKey(g.league,g);
+    const refName=approved[key],scorerName=approvedScorer[key];
+    if(g.date!==lastDate){
+      const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
+      html+='<div class="date-header">'+ds+'</div>';
+      lastDate=g.date;
+    }
+    const leagueColor=g.league==='ihl'?'var(--maroon)':'#4a1020';
+    html+='<div class="summary-row">';
+    html+='<span class="summary-time">'+g.time+'</span>';
+    html+='<span class="summary-league" style="background:'+leagueColor+';">'+g.league.toUpperCase()+'</span>';
+    html+='<span class="summary-matchup">'+g.away+' @ '+g.home+'</span>';
+    html+='<span class="summary-ref'+(refName?'':' summary-unassigned')+'">🏒 '+(refName||'Unassigned')+'</span>';
+    html+='<span class="summary-scorer'+(scorerName?'':' summary-unassigned')+'">📋 '+(scorerName||'Unassigned')+'</span>';
+    html+='</div>';
+  });
+  document.getElementById('summary-list').innerHTML=html;
+}
+
+
 function openResetPayments(){
   if(!confirm('Clear ALL payment history for all refs? This cannot be undone.'))return;
   payments={};
@@ -2262,6 +2304,13 @@ function openRoleEditor(en){
   _reRoles=new Set(p.roles||['ref']);
   reUpdateUI();
   document.getElementById('roleEditorError').textContent='';
+  if(commMode){
+    document.getElementById('roleEditorTitle').textContent='🎽 '+name+"'s Roles";
+    document.getElementById('roleEditorDesc').textContent='Choose which roles '+name+' can be assigned to. They can work as both.';
+  } else {
+    document.getElementById('roleEditorTitle').textContent='🎽 My Roles';
+    document.getElementById('roleEditorDesc').textContent='Choose what you want to do this season. You can work as both.';
+  }
   document.getElementById('roleEditorModal').classList.add('show');
 }
 function reUpdateUI(){
@@ -2284,7 +2333,8 @@ async function confirmRoleEdit(){
   await saveProfiles();
   closeModal('roleEditorModal');
   showBanner('Roles updated!');
-  showProfileContent(_reEditingName);
+  if(commMode)renderCommRoster();
+  else showProfileContent(_reEditingName);
   render(); // refresh schedule to show correct slots
 }
 function signOutRef(){
@@ -2418,7 +2468,7 @@ function renderCommRoster(){
     html+='</div></div></div>';
     html+='<div class="ref-card-stats"><div class="ref-card-stat"><div class="rcs-num">'+myGames.length+'</div><div class="rcs-lbl">Assigned</div></div><div class="ref-card-stat"><div class="rcs-num">'+completed.length+'</div><div class="rcs-lbl">Done</div></div><div class="ref-card-stat"><div class="rcs-num">'+upcoming.length+'</div><div class="rcs-lbl">Upcoming</div></div></div>';
     html+='<div class="ref-card-pay"><div class="ref-card-pay-col"><div class="rcp-num pay-due">$'+earned+'</div><div class="rcp-lbl">Earned</div></div><div class="ref-card-pay-divider"></div><div class="ref-card-pay-col"><div class="rcp-num" style="color:#1a7a3c;">$'+paid+'</div><div class="rcp-lbl">Paid</div></div><div class="ref-card-pay-divider"></div><div class="ref-card-pay-col"><div class="rcp-num" style="color:'+balColor+';">'+balTxt+'</div><div class="rcp-lbl">Balance</div></div></div>';
-    html+='<div class="ref-card-actions"><button class="pay-out-btn" onclick="openPayout(\''+sn+'\')">💵 Pay Out</button><button class="pay-out-btn" style="background:var(--maroon);" onclick="commEditProfile(\''+sn+'\')">✏️ Edit</button><button class="pay-out-btn" style="background:#1a5a3a;" onclick="commEnterAsRef(\''+sn+'\')">👤 Enter as Ref</button><button class="delete-ref-btn" onclick="openDeleteRef(\''+sn+'\')">📦 Archive</button></div>';
+    html+='<div class="ref-card-actions"><button class="pay-out-btn" onclick="openPayout(\''+sn+'\')">💵 Pay Out</button><button class="pay-out-btn" style="background:var(--maroon);" onclick="commEditProfile(\''+sn+'\')">✏️ Edit</button><button class="pay-out-btn" style="background:#1a5a3a;" onclick="openRoleEditor(\''+sn+'\')">🎽 Roles</button><button class="pay-out-btn" style="background:#3a5a8a;" onclick="commEnterAsRef(\''+sn+'\')">👤 Enter as Ref</button><button class="delete-ref-btn" onclick="openDeleteRef(\''+sn+'\')">📦 Archive</button></div>';
     html+='</div>';
   });
 
