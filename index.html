@@ -53,15 +53,10 @@
   .official-select option{background:#0f1f3d;}
   .add-official-btn{background:transparent;border:1px solid #2a3a6a;color:#8a9ab0;border-radius:5px;padding:8px 12px;font-size:13px;cursor:pointer;white-space:nowrap;min-height:40px;}
   .league-tabs{display:flex;flex-wrap:wrap;gap:2px;}
-  .tab{flex:1;padding:9px 4px;border-radius:8px 8px 0 0;border:none;font-size:10px;font-weight:700;cursor:pointer;background:#152040;color:#7a8ab0;transition:all 0.15s;min-height:38px;-webkit-tap-highlight-color:transparent;min-width:0;white-space:nowrap;}
+  .tab{flex:1;min-width:calc(33.33% - 2px);padding:9px 3px;border-radius:6px 6px 0 0;border:none;font-size:10px;font-weight:700;cursor:pointer;background:#152040;color:#7a8ab0;transition:all 0.15s;min-height:38px;-webkit-tap-highlight-color:transparent;overflow:hidden;text-overflow:ellipsis;box-sizing:border-box;}
   .tab.active{background:#fff;color:var(--dark);}
   .tab .badge{display:inline-block;background:var(--gold);color:var(--dark);border-radius:10px;padding:1px 5px;font-size:9px;margin-left:2px;}
   .tab:not(.active) .badge{background:#2a3060;color:#8a9ac8;}
-  /* On narrow screens split into two rows of 3-4 tabs each */
-  @media (max-width:480px){
-    .tab{flex:none;width:calc(33.33% - 2px);}
-    .tab.comm-only{width:calc(50% - 2px);}
-  }
   .panel{background:#fff;border-radius:0 0 10px 10px;overflow:hidden;}
   .panel-header{background:var(--dark);color:#fff;padding:9px 14px;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;display:flex;justify-content:space-between;align-items:center;}
   .panel-header .range{color:var(--gold);font-weight:700;font-size:10px;}
@@ -544,7 +539,12 @@ function startPolling(){
       const cData=await fbGet('completed');
       if(cData){completedOverrides=cData;localStorage.setItem('idhf-completed',JSON.stringify(completedOverrides));}
       const cancelData=await fbGet('cancellations');
-      if(cancelData){cancellations=cancelData;localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));}
+      if(cancelData){
+        // Strip out any already-acknowledged (seen:true) entries — they shouldn't stay
+        cancellations={};
+        Object.keys(cancelData).forEach(k=>{if(cancelData[k].seen===false)cancellations[k]=cancelData[k];});
+        localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));
+      }
       const nrData=await fbGet('needsReplacement');
       if(nrData){needsReplacement=nrData;localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));}
       const pData=await fbGet('profiles');
@@ -633,6 +633,8 @@ let officials=JSON.parse(localStorage.getItem('idhf-officials')||'null')||[...DE
 let profiles=JSON.parse(localStorage.getItem('idhf-profiles')||'{}');
 let payments=JSON.parse(localStorage.getItem('idhf-payments')||'{}');
 let cancellations=JSON.parse(localStorage.getItem('idhf-cancels')||'{}');
+// Strip any already-acknowledged entries that may be cached
+Object.keys(cancellations).forEach(k=>{if(cancellations[k].seen!==false)delete cancellations[k];});
 let needsReplacement=JSON.parse(localStorage.getItem('idhf-needs-replace')||'{}');
 let _profileUnlocked=null,_pendingDeleteRef=null,_pendingPayoutRef=null,_pendingCancelKey=null,_editingRefName=null;
 
@@ -1370,7 +1372,12 @@ async function initFirebase(){
     const cData=await fbGet('completed');if(cData){completedOverrides=cData;localStorage.setItem('idhf-completed',JSON.stringify(completedOverrides));}
     const pData=await fbGet('profiles');if(pData){profiles=pData;localStorage.setItem('idhf-profiles',JSON.stringify(profiles));}
     const pyData=await fbGet('payments');if(pyData){payments=pyData;localStorage.setItem('idhf-payments',JSON.stringify(payments));}
-    const cancelData=await fbGet('cancellations');if(cancelData){cancellations=cancelData;localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));}
+    const cancelData=await fbGet('cancellations');
+    if(cancelData){
+      cancellations={};
+      Object.keys(cancelData).forEach(k=>{if(cancelData[k].seen===false)cancellations[k]=cancelData[k];});
+      localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));
+    }
     const nrData=await fbGet('needsReplacement');if(nrData){needsReplacement=nrData;localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));}
     const data=await fbGet('state');
     if(data){availability=data.availability||{};approved=data.approved||{};localStorage.setItem('idhf-avail',JSON.stringify(availability));localStorage.setItem('idhf-approved',JSON.stringify(approved));refreshCurrentTab();updateMineBadge();updatePendingBadge();}
