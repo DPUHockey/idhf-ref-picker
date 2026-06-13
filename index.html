@@ -123,6 +123,8 @@
   .summary-ref,.summary-scorer{font-size:11px;color:var(--dark);white-space:nowrap;flex-shrink:0;}
   .summary-unassigned{color:#c0392b;font-style:italic;}
   .game-row{display:flex;align-items:flex-start;padding:12px 14px;border-bottom:1px solid #e8f0f5;gap:10px;}
+  .game-row.game-row-highlight{animation:rowFlash 2.2s ease-out;}
+  @keyframes rowFlash{0%{background:#fff3cc;}70%{background:#fff3cc;}100%{background:transparent;}}
   .game-row:last-child{border-bottom:none;}
   .game-row.has-availability{background:#fdf8ee;}
   .game-row.approved-row{background:var(--maroon-light);}
@@ -719,7 +721,7 @@
     <button class="tab" id="tab-mypay" onclick="switchTab('mypay')">💵 Pay</button>
     <button class="tab" id="tab-profile" onclick="switchTab('profile')">👤 Profile</button>
     <button class="tab comm-only" id="tab-pay" onclick="switchTab('pay')" style="display:none;">💰 Payroll</button>
-    <button class="tab comm-only" id="tab-summary" onclick="switchTab('summary')" style="display:none;">📋 Summary</button>
+    <button class="tab" id="tab-summary" onclick="switchTab('summary')">📋 Summary</button>
   </div>
 
   <!-- PENDING APPROVALS -->
@@ -1135,7 +1137,7 @@ function render(){
       // Row style
       const isMine=(isMineRef||isMineScorer);
       const rowClass=isMine?'my-game':(isApproved?'approved-row':(needsRef?'needs-ref':(avail.length||availSc.length?'has-availability':'')));
-      html+='<div class="game-row '+rowClass+'"><div class="game-time">'+g.time+'</div><div class="game-info">';
+      html+='<div class="game-row '+rowClass+'" id="grow-'+euc(key)+'"><div class="game-time">'+g.time+'</div><div class="game-info">';
       html+='<div class="game-matchup">'+g.away+' vs '+g.home+(po?'<span class="playoff-tag">PLAYOFF</span>':'')+(needsRef?'<span class="needs-ref-tag">🔴 Needs Ref!</span>':'')+'</div>';
       html+='<div class="game-meta">Inwood Ice Arena</div>';
 
@@ -1408,7 +1410,7 @@ function refreshCurrentTab(){
 }
 
 function switchTab(tab){
-  if(tab!=='mine'&&tab!=='done'&&tab!=='mypay'&&tab!=='pending'&&tab!=='pay'&&tab!=='profile')activeLeague=tab;
+  if(tab!=='mine'&&tab!=='done'&&tab!=='mypay'&&tab!=='pending'&&tab!=='pay'&&tab!=='summary'&&tab!=='profile')activeLeague=tab;
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   const tabEl=document.getElementById('tab-'+tab);if(tabEl)tabEl.classList.add('active');
   const panels=['list-panel','mine-panel','done-panel','mypay-panel','pending-panel','pay-panel','summary-panel','profile-panel'];
@@ -1421,6 +1423,20 @@ function switchTab(tab){
   else if(tab==='summary'){document.getElementById('summary-panel').classList.add('active');document.getElementById('summary-panel').style.display='';renderSummary();}
   else if(tab==='profile'){document.getElementById('profile-panel').classList.add('active');document.getElementById('profile-panel').style.display='';renderProfileTab();}
   else{document.getElementById('list-panel').style.display='';render();}
+}
+
+// Jump from the Summary tab to a specific game on the IHL/FHL tab,
+// scroll it into view, and briefly highlight it so officials can find it
+// and tap "I'll Ref"/"I'll Score".
+function jumpToGame(league,ek){
+  switchTab(league);
+  setTimeout(()=>{
+    const el=document.getElementById('grow-'+ek);
+    if(!el)return;
+    el.scrollIntoView({behavior:'smooth',block:'center'});
+    el.classList.add('game-row-highlight');
+    setTimeout(()=>el.classList.remove('game-row-highlight'),2200);
+  },120);
 }
 
 function renderMyGames(){
@@ -1949,7 +1965,7 @@ function renderSummary(){
       lastDate=g.date;
     }
     const leagueColor=g.league==='ihl'?'var(--maroon)':'#4a1020';
-    html+='<div class="summary-row">';
+    html+='<div class="summary-row" style="cursor:pointer;" onclick="jumpToGame(\''+g.league+'\',\''+euc(key)+'\')">';
     html+='<span class="summary-time">'+g.time+'</span>';
     html+='<span class="summary-league" style="background:'+leagueColor+';">'+g.league.toUpperCase()+'</span>';
     html+='<span class="summary-matchup">'+g.away+' @ '+g.home+'</span>';
