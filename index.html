@@ -834,6 +834,11 @@
             <button class="mark-avail-btn" id="notifyBtn" onclick="requestNotifications()" style="flex:1;margin-top:0;"></button>
             <button id="notifyOffBtn" onclick="disableNotifications()" style="display:none;flex-shrink:0;font-size:12px;font-weight:700;color:#c0392b;background:#ffeaea;border:1px solid #f0b0b0;border-radius:6px;padding:8px 12px;cursor:pointer;">Turn Off</button>
           </div>
+          <div style="border-top:1px solid #f0d0d4;margin-top:12px;padding-top:12px;">
+            <div style="font-size:12px;font-weight:700;color:var(--maroon);margin-bottom:6px;">📢 Open Slots</div>
+            <div style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5;">When a game you're qualified for opens up, you'll get a notification next time you open the app (if enabled above). Or check right now:</div>
+            <button onclick="manualCheckOpenSlots()" style="width:100%;font-size:12px;font-weight:700;color:#1a3a7a;background:#e6ecf6;border:1px solid #a0b8d8;border-radius:6px;padding:9px 12px;cursor:pointer;">🔍 Check for Open Slots Now</button>
+          </div>
         </div>
       </div>
       <div class="profile-section" style="padding:12px 16px;">
@@ -2703,25 +2708,43 @@ function renderCommRoster(){
   document.getElementById('profile-locked').style.display='none';document.getElementById('profile-content').style.display='none';
   const roster=document.getElementById('profile-comm-roster');roster.style.display='';
   const ag=allGames(),refs=[...new Set([...officials,...Object.values(approved).filter(Boolean),...Object.values(approvedScorer).filter(Boolean)])].sort();
+  // Combine ref + scorekeeper games/earnings per official — previously this only
+  // looked at `approved` (ref), so scorekeeper-only officials showed all zeros.
   let totalEarned=0,totalPaid=0;
-  refs.forEach(name=>{const earned=ag.filter(g=>approved[gameKey(g.league,g)]===name&&isGameComplete(g)).length*PAY_RATE;const paid=getRefTotalPaid(name);totalEarned+=earned;totalPaid+=paid;});
+  refs.forEach(name=>{
+    const refDone=ag.filter(g=>approved[gameKey(g.league,g)]===name&&isGameComplete(g)).length;
+    const scDone=ag.filter(g=>approvedScorer[gameKey(g.league,g)]===name&&isScorerComplete(g)).length;
+    totalEarned+=refDone*PAY_RATE+scDone*SCORER_RATE;
+    totalPaid+=getRefTotalPaid(name);
+  });
   const totalOwed=totalEarned-totalPaid;
-  let html='<div class="comm-roster-header"><span>👤 All Officials — '+refs.length+' refs</span><span class="range">Owed: $'+Math.max(0,totalOwed)+'</span></div>';
+  let html='<div class="comm-roster-header"><span>👤 All Officials — '+refs.length+'</span><span class="range">Owed: $'+Math.max(0,totalOwed)+'</span></div>';
   if(!refs.length){html+='<div class="no-games-msg">No officials on the roster yet.</div>';roster.innerHTML=html;return;}
   refs.forEach(name=>{
-    const p=profiles[name]||{},myGames=ag.filter(g=>approved[gameKey(g.league,g)]===name),completed=myGames.filter(g=>isGameComplete(g)),upcoming=myGames.filter(g=>!isPast(g.date));
-    const earned=completed.length*PAY_RATE,paid=getRefTotalPaid(name),balance=earned-paid;
+    const p=profiles[name]||{};
+    const myRefGames=ag.filter(g=>approved[gameKey(g.league,g)]===name);
+    const myScGames=ag.filter(g=>approvedScorer[gameKey(g.league,g)]===name);
+    const refDone=myRefGames.filter(g=>isGameComplete(g)),scDone=myScGames.filter(g=>isScorerComplete(g));
+    const refUpcoming=myRefGames.filter(g=>!isPast(g.date)),scUpcoming=myScGames.filter(g=>!isPast(g.date));
+    const assignedCount=myRefGames.length+myScGames.length;
+    const completedCount=refDone.length+scDone.length;
+    const upcomingCount=refUpcoming.length+scUpcoming.length;
+    const earned=refDone.length*PAY_RATE+scDone.length*SCORER_RATE,paid=getRefTotalPaid(name),balance=earned-paid;
     const balColor=balance>0?'var(--maroon)':(balance<0?'#7a4000':'#1a7a3c'),balTxt=balance>0?'-$'+balance:(balance<0?'+$'+Math.abs(balance):'✓ Clear');
     const initials=name.split(' ').map(w=>w[0]).join('').substring(0,2).toUpperCase(),sn=euc(name);
+    const roles=p.roles||['ref'];
+    let roleBadges='';
+    if(roles.includes('ref'))roleBadges+='<span style="font-size:9px;font-weight:700;background:var(--maroon);color:#fff;border-radius:3px;padding:2px 5px;margin-left:6px;">🏒 REF</span>';
+    if(roles.includes('scorer'))roleBadges+='<span style="font-size:9px;font-weight:700;background:#1a5a3a;color:#fff;border-radius:3px;padding:2px 5px;margin-left:6px;">📋 SCORE</span>';
     html+='<div class="ref-card">';
-    html+='<div class="ref-card-header"><div class="ref-card-avatar">'+initials+'</div><div style="flex:1;min-width:0;"><div class="ref-card-name">'+name+'</div>';
+    html+='<div class="ref-card-header"><div class="ref-card-avatar">'+initials+'</div><div style="flex:1;min-width:0;"><div class="ref-card-name">'+name+roleBadges+'</div>';
     html+='<div class="ref-card-sub" style="display:flex;flex-direction:column;gap:2px;margin-top:3px;">';
     if(p.phone)html+='<span>📞 '+p.phone+'</span>';
     if(p.email)html+='<span>✉️ '+p.email+'</span>';
     if(p.pin)html+='<span style="letter-spacing:3px;font-size:10px;">PIN: '+p.pin+'</span>';
     if(!p.phone&&!p.email&&!p.pin)html+='<span style="font-style:italic;">No profile info</span>';
     html+='</div></div></div>';
-    html+='<div class="ref-card-stats"><div class="ref-card-stat"><div class="rcs-num">'+myGames.length+'</div><div class="rcs-lbl">Assigned</div></div><div class="ref-card-stat"><div class="rcs-num">'+completed.length+'</div><div class="rcs-lbl">Done</div></div><div class="ref-card-stat"><div class="rcs-num">'+upcoming.length+'</div><div class="rcs-lbl">Upcoming</div></div></div>';
+    html+='<div class="ref-card-stats"><div class="ref-card-stat"><div class="rcs-num">'+assignedCount+'</div><div class="rcs-lbl">Assigned</div></div><div class="ref-card-stat"><div class="rcs-num">'+completedCount+'</div><div class="rcs-lbl">Done</div></div><div class="ref-card-stat"><div class="rcs-num">'+upcomingCount+'</div><div class="rcs-lbl">Upcoming</div></div></div>';
     html+='<div class="ref-card-pay"><div class="ref-card-pay-col"><div class="rcp-num pay-due">$'+earned+'</div><div class="rcp-lbl">Earned</div></div><div class="ref-card-pay-divider"></div><div class="ref-card-pay-col"><div class="rcp-num" style="color:#1a7a3c;">$'+paid+'</div><div class="rcp-lbl">Paid</div></div><div class="ref-card-pay-divider"></div><div class="ref-card-pay-col"><div class="rcp-num" style="color:'+balColor+';">'+balTxt+'</div><div class="rcp-lbl">Balance</div></div></div>';
     html+='<div class="ref-card-actions"><button class="pay-out-btn" onclick="openPayout(\''+sn+'\')">💵 Pay Out</button><button class="pay-out-btn" style="background:var(--maroon);" onclick="commEditProfile(\''+sn+'\')">✏️ Edit</button><button class="pay-out-btn" style="background:#1a5a3a;" onclick="openRoleEditor(\''+sn+'\')">🎽 Roles</button><button class="pay-out-btn" style="background:#3a5a8a;" onclick="commEnterAsRef(\''+sn+'\')">👤 Enter as Ref</button><button class="delete-ref-btn" onclick="openDeleteRef(\''+sn+'\')">📦 Archive</button></div>';
     html+='</div>';
@@ -3173,9 +3196,10 @@ function checkDueNotifications(){
 // re-notify every time the app opens; re-notifies if NEW openings appear, and
 // clears the seen-set entry once a slot is filled (so it can notify again if it
 // reopens later).
-function checkOpenSlotNotifications(){
-  if(!('Notification' in window)||Notification.permission!=='granted'||!getNotifPref())return;
-  const official=selectedOfficial();if(!official)return;
+// Finds games matching `official`'s roles that have been flagged "needs
+// replacement" and are still unfilled. Shared by the automatic (silent,
+// notification-only) checker and the manual "Check Now" button.
+function findOpenSlotsFor(official){
   const roles=(profiles[official]&&profiles[official].roles)||['ref'];
   const ag=allGames();
   const openGames=[];
@@ -3193,6 +3217,16 @@ function checkOpenSlotNotifications(){
       if(g&&!isPast(g.date))openGames.push(Object.assign({},g,{role:'scorer',key}));
     });
   }
+  return openGames.sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
+}
+
+// Automatic, silent check — called on boot/resume/poll. Only fires a native
+// Notification for slots not seen before, and only if permission is granted.
+// Requires findOpenSlotsFor + Notification support + permission + reminders on.
+function checkOpenSlotNotifications(){
+  if(!('Notification' in window)||Notification.permission!=='granted'||!getNotifPref())return;
+  const official=selectedOfficial();if(!official)return;
+  const openGames=findOpenSlotsFor(official);
   const seenKey='idhf-openslot-seen-'+official;
   const prevSeen=new Set(JSON.parse(localStorage.getItem(seenKey)||'[]'));
   const currentKeys=openGames.map(g=>g.key+'|'+g.role);
@@ -3217,6 +3251,50 @@ function checkOpenSlotNotifications(){
     }
   }
   localStorage.setItem(seenKey,JSON.stringify(currentKeys));
+}
+
+// Manual "🔍 Check for Open Slots Now" button — always gives feedback via a
+// banner regardless of notification permission, so this works for testing and
+// as a fallback for officials who haven't enabled (or can't get) notifications.
+function manualCheckOpenSlots(){
+  const official=selectedOfficial();
+  if(!official){showBanner('Select your name first');return;}
+  const openGames=findOpenSlotsFor(official);
+  // Mark these as "seen" too, so an automatic notification doesn't immediately
+  // re-fire for slots the official just checked manually.
+  const seenKey='idhf-openslot-seen-'+official;
+  localStorage.setItem(seenKey,JSON.stringify(openGames.map(g=>g.key+'|'+g.role)));
+  if(!openGames.length){
+    showBanner('✓ No open slots for your role(s) right now');
+    return;
+  }
+  const refCount=openGames.filter(g=>g.role==='ref').length,scCount=openGames.filter(g=>g.role==='scorer').length;
+  const parts=[];
+  if(refCount)parts.push(refCount+' ref slot'+(refCount>1?'s':''));
+  if(scCount)parts.push(scCount+' scorekeeper slot'+(scCount>1?'s':''));
+  if(openGames.length===1){
+    const g=openGames[0];
+    const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
+    showBanner('📢 '+parts.join(' and ')+' open: '+ds+' '+g.time+' — '+g.away+' vs '+g.home+' ('+g.league.toUpperCase()+')');
+  } else {
+    showBanner('📢 '+parts.join(' and ')+' open — check Summary to pick one up');
+  }
+  // Also fire native notifications if available/permitted, same as the automatic check
+  if(('Notification' in window)&&Notification.permission==='granted'){
+    if(openGames.length===1){
+      const g=openGames[0],roleTag=g.role==='ref'?'🏒 Ref':'📋 Scorekeeper';
+      const[y,m,d]=g.date.split('-').map(Number),ds=DAYS[new Date(y,m-1,d).getDay()]+' '+MS[m-1]+' '+d;
+      new Notification('📢 Open '+(g.role==='ref'?'Ref':'Scorekeeper')+' Slot — IDHF',{
+        body:roleTag+' needed · '+ds+' '+g.time+' · '+g.away+' vs '+g.home+' ('+g.league.toUpperCase()+')',
+        tag:'idhf-open-'+g.key+'-'+g.role
+      });
+    } else {
+      new Notification('📢 Open Slots — IDHF',{
+        body:parts.join(' and ')+' open. Check the Summary tab to pick one up.',
+        tag:'idhf-open-multi-'+official
+      });
+    }
+  }
 }
 
 // ── BOOT ──────────────────────────────────────────────────────────────────
