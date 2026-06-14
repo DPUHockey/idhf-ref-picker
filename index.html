@@ -930,18 +930,26 @@ async function pollFast(){
 
 async function pollSlow(){
   try{
-    const [cData,cScData,pData,pyData,archData]=await Promise.all([
+    const [cData,cScData,pData,pyData,archData,oData]=await Promise.all([
       fbGet('completed'),
       fbGet('completedScorer'),
       fbGet('profiles'),
       fbGet('payments'),
-      fbGet('archived')
+      fbGet('archived'),
+      fbGet('officials')
     ]);
     if(cData){completedOverrides=cData;localStorage.setItem('idhf-completed',JSON.stringify(completedOverrides));}
     if(cScData){completedScorer=cScData;localStorage.setItem('idhf-completed-sc',JSON.stringify(completedScorer));}
     if(pData){profiles=pData;localStorage.setItem('idhf-profiles',JSON.stringify(profiles));}
     if(pyData){payments=pyData;localStorage.setItem('idhf-payments',JSON.stringify(payments));}
     if(archData){archived=archData;localStorage.setItem('idhf-archived',JSON.stringify(archived));}
+    // Roster — pick up officials who signed up (or were archived) on another
+    // device since boot. Same merge-with-defaults approach as initial boot load.
+    if(oData&&oData.list){
+      officials=[...new Set([...oData.list,...DEFAULT_OFFICIALS])];
+      localStorage.setItem('idhf-officials',JSON.stringify(officials));
+      buildOfficialDropdown();
+    }
     // Refresh tabs that depend on slow data (Done, Pay, Profile)
     const at=document.querySelector('.tab.active');
     if(at){const t=at.id.replace('tab-','');if(['done','mypay','pay','profile'].includes(t))refreshCurrentTab();}
@@ -1750,11 +1758,12 @@ function updateCommPendingAlert(){
   const sAlert=document.getElementById('comm-pending-sc-alert');
   const sCount=document.getElementById('comm-pending-sc-count');
   if(sAlert&&sCount){sCount.textContent=pendingSc;sAlert.style.display=pendingSc>0?'':'none';}
-  // Cancellations (ref + scorer combined) — only count "urgent" ones (within 7 days,
-  // or orphaned), matching the same filter the Pending tab uses. Otherwise a
-  // cancellation on a far-future game shows a ghost alert that never appears in Pending.
-  const cancelRefCount=Object.keys(cancellations).filter(key=>{const c=cancellations[key];if(!c||c.seen!==false)return false;const g=ag.find(g=>gameKey(g.league,g)===key);return isUrgent(g);}).length;
-  const cancelScCount=Object.keys(cancellationsScorer).filter(key=>{const c=cancellationsScorer[key];if(!c||c.seen!==false)return false;const g=ag.find(g=>gameKey(g.league,g)===key);return isUrgent(g);}).length;
+  // Cancellations (ref + scorer combined) — show ALL unacknowledged cancellations,
+  // regardless of how far away the game is. A cancellation means an official backed
+  // out of a commitment; the commissioner needs to know right away to find a
+  // replacement, not just when the game is within 7 days.
+  const cancelRefCount=Object.keys(cancellations).filter(key=>cancellations[key]&&cancellations[key].seen===false).length;
+  const cancelScCount=Object.keys(cancellationsScorer).filter(key=>cancellationsScorer[key]&&cancellationsScorer[key].seen===false).length;
   const cancels=cancelRefCount+cancelScCount;
   const calert=document.getElementById('comm-cancel-alert');
   const ccount=document.getElementById('comm-cancel-count');
@@ -1765,8 +1774,8 @@ function countPendingTotal(){
   const ag=allGames();
   const pendingRef=ag.filter(g=>{const k=gameKey(g.league,g);return(availability[k]||[]).length>0&&!approved[k]&&!isPast(g.date);}).length;
   const pendingScorer=ag.filter(g=>{const k=gameKey(g.league,g);return(availabilityScorer[k]||[]).length>0&&!approvedScorer[k]&&!isPast(g.date);}).length;
-  const cancelRef=Object.keys(cancellations).filter(key=>{const c=cancellations[key];if(!c||c.seen!==false)return false;const g=ag.find(g=>gameKey(g.league,g)===key);return isUrgent(g);}).length;
-  const cancelScorer=Object.keys(cancellationsScorer).filter(key=>{const c=cancellationsScorer[key];if(!c||c.seen!==false)return false;const g=ag.find(g=>gameKey(g.league,g)===key);return isUrgent(g);}).length;
+  const cancelRef=Object.keys(cancellations).filter(key=>cancellations[key]&&cancellations[key].seen===false).length;
+  const cancelScorer=Object.keys(cancellationsScorer).filter(key=>cancellationsScorer[key]&&cancellationsScorer[key].seen===false).length;
   const nrGames=Object.keys(needsReplacement).map(key=>{const g=ag.find(g=>gameKey(g.league,g)===key);return{key,g};}).filter(x=>x.g&&!isPast(x.g.date)&&!approved[x.key]&&isUrgent(x.g)).length;
   return nrGames+cancelRef+cancelScorer+pendingRef+pendingScorer;
 }
@@ -1778,18 +1787,19 @@ function buildPendingHtml(){
   const pendingRef=ag.filter(g=>{const k=gameKey(g.league,g);return(availability[k]||[]).length>0&&!approved[k]&&!isPast(g.date);}).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
   // Scorer pending assignments
   const pendingScorer=ag.filter(g=>{const k=gameKey(g.league,g);return(availabilityScorer[k]||[]).length>0&&!approvedScorer[k]&&!isPast(g.date);}).sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:0);
-  // Ref cancellations — show ALL, even if game lookup fails (orphaned keys); only urgent (within 7 days)
+  // Ref cancellations — show ALL unacknowledged, even if game lookup fails (orphaned keys)
+  // or the game is far in the future. The official backed out; surface it immediately.
   const cancelRef=Object.keys(cancellations).map(key=>{
     const c=cancellations[key];
     const g=ag.find(g=>gameKey(g.league,g)===key);
     return{key,c,g};
-  }).filter(x=>x.c&&x.c.seen===false&&isUrgent(x.g)).sort((a,b)=>(b.c.timestamp||0)-(a.c.timestamp||0));
-  // Scorer cancellations — only urgent (within 7 days)
+  }).filter(x=>x.c&&x.c.seen===false).sort((a,b)=>(b.c.timestamp||0)-(a.c.timestamp||0));
+  // Scorer cancellations — show ALL unacknowledged
   const cancelScorer=Object.keys(cancellationsScorer).map(key=>{
     const c=cancellationsScorer[key];
     const g=ag.find(g=>gameKey(g.league,g)===key);
     return{key,c,g};
-  }).filter(x=>x.c&&x.c.seen===false&&isUrgent(x.g)).sort((a,b)=>(b.c.timestamp||0)-(a.c.timestamp||0));
+  }).filter(x=>x.c&&x.c.seen===false).sort((a,b)=>(b.c.timestamp||0)-(a.c.timestamp||0));
   // Needs replacement — only urgent (within 7 days)
   const nrGames=Object.keys(needsReplacement).map(key=>{const g=ag.find(g=>gameKey(g.league,g)===key);return{key,g};}).filter(x=>x.g&&!isPast(x.g.date)&&!approved[x.key]&&isUrgent(x.g));
   const parts=[];
@@ -2485,7 +2495,7 @@ function exitCommImpersonate(){
 function renderCommRoster(){
   document.getElementById('profile-locked').style.display='none';document.getElementById('profile-content').style.display='none';
   const roster=document.getElementById('profile-comm-roster');roster.style.display='';
-  const ag=allGames(),refs=[...new Set([...officials,...Object.values(approved).filter(Boolean)])].sort();
+  const ag=allGames(),refs=[...new Set([...officials,...Object.values(approved).filter(Boolean),...Object.values(approvedScorer).filter(Boolean)])].sort();
   let totalEarned=0,totalPaid=0;
   refs.forEach(name=>{const earned=ag.filter(g=>approved[gameKey(g.league,g)]===name&&isGameComplete(g)).length*PAY_RATE;const paid=getRefTotalPaid(name);totalEarned+=earned;totalPaid+=paid;});
   const totalOwed=totalEarned-totalPaid;
