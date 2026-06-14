@@ -175,6 +175,7 @@
   .my-game-row:last-child{border-bottom:none;}
   .my-game-row.today-game{background:#fff0f2;border-left:4px solid var(--maroon);}
   .my-game-row.done-game{background:#f0faf0;border-left:4px solid #1a7a3c;}
+  .my-game-row.cancel-pending-game{background:#fffaf0;border-left:4px solid #e08800;opacity:0.75;}
   /* Ref stripe watermark — directly on element, no pseudo, no z-index fights */
   .my-game-row.ref-stripe{background-image:repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(0,0,0,0.045) 8px,rgba(0,0,0,0.045) 16px);}
   .my-game-row.today-game.ref-stripe{background-image:repeating-linear-gradient(45deg,transparent,transparent 8px,rgba(0,0,0,0.045) 8px,rgba(0,0,0,0.045) 16px);}
@@ -906,7 +907,6 @@ async function pollFast(){
     if(cancelRes&&typeof cancelRes==='object'){
       cancellations={};
       Object.keys(cancelRes).forEach(k=>{if(cancelRes[k]&&cancelRes[k].seen===false)cancellations[k]=cancelRes[k];});
-      Object.keys(cancellations).forEach(k=>{if(approved[k]===cancellations[k].refName)delete approved[k];});
     } else { cancellations={}; }
     localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));
 
@@ -914,7 +914,6 @@ async function pollFast(){
     if(cancelScRes&&typeof cancelScRes==='object'){
       cancellationsScorer={};
       Object.keys(cancelScRes).forEach(k=>{if(cancelScRes[k]&&cancelScRes[k].seen===false)cancellationsScorer[k]=cancelScRes[k];});
-      Object.keys(cancellationsScorer).forEach(k=>{if(approvedScorer[k]===cancellationsScorer[k].refName)delete approvedScorer[k];});
     } else { cancellationsScorer={}; }
     localStorage.setItem('idhf-cancels-sc',JSON.stringify(cancellationsScorer));
 
@@ -1045,11 +1044,8 @@ let payments=JSON.parse(localStorage.getItem('idhf-payments')||'{}');
 let cancellations=JSON.parse(localStorage.getItem('idhf-cancels')||'{}');
 // Strip any already-acknowledged entries that may be cached
 Object.keys(cancellations).forEach(k=>{if(cancellations[k].seen!==false)delete cancellations[k];});
-// Ensure approved doesn't still show a ref who cancelled
-Object.keys(cancellations).forEach(k=>{if(approved[k]===cancellations[k].refName)delete approved[k];});
 let cancellationsScorer=JSON.parse(localStorage.getItem('idhf-cancels-sc')||'{}');
 Object.keys(cancellationsScorer).forEach(k=>{if(cancellationsScorer[k].seen!==false)delete cancellationsScorer[k];});
-Object.keys(cancellationsScorer).forEach(k=>{if(approvedScorer[k]===cancellationsScorer[k].refName)delete approvedScorer[k];});
 let needsReplacement=JSON.parse(localStorage.getItem('idhf-needs-replace')||'{}');
 let _profileUnlocked=null,_pendingDeleteRef=null,_pendingPayoutRef=null,_pendingCancelKey=null,_editingRefName=null;
 let archived=JSON.parse(localStorage.getItem('idhf-archived')||'{}');
@@ -1247,11 +1243,12 @@ function markScorerAvail(el){
   if(!availabilityScorer[key].includes(name))availabilityScorer[key].push(name);
   saveAll();render();
 }
-function approveScorer(el){const key=decodeURIComponent(el.dataset.key),name=decodeURIComponent(el.dataset.name);approvedScorer[key]=name;saveAll();refreshCurrentTab();showBanner(name+' assigned as Scorer');}
-function unapproveScorer(el){const key=decodeURIComponent(el.dataset.key);delete approvedScorer[key];saveAll();refreshCurrentTab();showBanner('Scorer assignment undone');}
+function approveScorer(el){const key=decodeURIComponent(el.dataset.key),name=decodeURIComponent(el.dataset.name);approvedScorer[key]=name;clearPendingScorerCancellation(key);saveAll();refreshCurrentTab();showBanner(name+' assigned as Scorer');}
+function unapproveScorer(el){const key=decodeURIComponent(el.dataset.key);delete approvedScorer[key];clearPendingScorerCancellation(key);saveAll();refreshCurrentTab();showBanner('Scorer assignment undone');}
 function approveRef(el){
   const key=decodeURIComponent(el.dataset.key),name=decodeURIComponent(el.dataset.name);
   approved[key]=name;
+  clearPendingCancellation(key);
   // If this game was flagged as needing replacement, clear that flag
   if(needsReplacement[key]){delete needsReplacement[key];localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));fbSet('needsReplacement',needsReplacement).catch(e=>{});}
   saveAll();refreshCurrentTab();showBanner(name+' assigned');
@@ -1259,10 +1256,11 @@ function approveRef(el){
 function approveRefNR(el){
   const key=decodeURIComponent(el.dataset.key),name=decodeURIComponent(el.dataset.name);
   approved[key]=name;
+  clearPendingCancellation(key);
   if(needsReplacement[key]){delete needsReplacement[key];localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));fbSet('needsReplacement',needsReplacement).catch(e=>{});}
   saveAll();updateCommPendingAlert();setTimeout(()=>refreshCurrentTab(),100);showBanner(name+' assigned');
 }
-function unapproveRef(el){const key=decodeURIComponent(el.dataset.key);delete approved[key];saveAll();refreshCurrentTab();showBanner('Assignment undone');}
+function unapproveRef(el){const key=decodeURIComponent(el.dataset.key);delete approved[key];clearPendingCancellation(key);saveAll();refreshCurrentTab();showBanner('Assignment undone');}
 
 // ── MANUAL ASSIGN (commissioner picks anyone, regardless of availability) ──
 let _manualAssignKey=null,_manualAssignRole=null;
@@ -1296,9 +1294,11 @@ function confirmManualAssign(){
   const name=document.getElementById('manualAssignSelect').value;
   if(role==='ref'){
     if(name)approved[key]=name;else delete approved[key];
+    clearPendingCancellation(key);
     if(needsReplacement[key]){delete needsReplacement[key];localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));fbSet('needsReplacement',needsReplacement).catch(e=>{});}
   } else {
     if(name)approvedScorer[key]=name;else delete approvedScorer[key];
+    clearPendingScorerCancellation(key);
   }
   closeModal('manualAssignModal');
   saveAll();updateCommPendingAlert();refreshCurrentTab();
@@ -1485,27 +1485,6 @@ function renderMyGames(){
   document.getElementById('mine-title').textContent=official+"'s Games";
   if(!myGames.length){document.getElementById('mine-list').innerHTML='<div class="no-games-msg">No assigned games yet.<br><span style="font-size:12px">Mark availability on the IHL and FHL tabs.</span></div>';return;}
 
-  // ── STALE CANCELLATION CLEANUP ──
-  // If a ref currently HOLDS an assignment (approved/approvedScorer===official) but
-  // there's a leftover cancellation record for them on that same game with seen:false,
-  // that record is stale (e.g. commissioner re-assigned them after a cancellation
-  // without it being acknowledged) and is blocking the Cancel button. Clear it.
-  let staleCleared=false;
-  myGames.forEach(g=>{
-    const key=gameKey(g.league,g);
-    if(g.myRole==='ref'&&approved[key]===official&&cancellations[key]&&cancellations[key].refName===official&&cancellations[key].seen===false){
-      delete cancellations[key];staleCleared=true;
-    }
-    if(g.myRole==='scorer'&&approvedScorer[key]===official&&cancellationsScorer[key]&&cancellationsScorer[key].refName===official&&cancellationsScorer[key].seen===false){
-      delete cancellationsScorer[key];staleCleared=true;
-    }
-  });
-  if(staleCleared){
-    localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));
-    localStorage.setItem('idhf-cancels-sc',JSON.stringify(cancellationsScorer));
-    saveCancellations();saveCancellationsScorer();
-  }
-
   let html='';
   myGames.forEach(g=>{
     const isRef=g.myRole==='ref',isToday=g.date===ts,isPastGame=isPast(g.date),ll=g.league.toUpperCase();
@@ -1521,7 +1500,11 @@ function renderMyGames(){
     let payUnlocked=false;
     if(tmatch){let hr=parseInt(tmatch[1]),mn=parseInt(tmatch[2]),ap=tmatch[3].toUpperCase();if(ap==='PM'&&hr!==12)hr+=12;if(ap==='AM'&&hr===12)hr=0;payUnlocked=Date.now()>=new Date(y,m-1,d,hr,mn,0).getTime()+3600000;}
 
-    html+='<div class="my-game-row'+(isRef?' ref-stripe':'')+(isToday?' today-game':'')+(done?' done-game':'')+'"><div class="my-game-row-content">';
+    const hasCancelled=isRef&&cancellations[key]&&cancellations[key].refName===official&&cancellations[key].seen===false;
+    const hasCancelledScorer=!isRef&&cancellationsScorer[key]&&cancellationsScorer[key].refName===official&&cancellationsScorer[key].seen===false;
+    const isCancelPending=hasCancelled||hasCancelledScorer;
+
+    html+='<div class="my-game-row'+(isRef?' ref-stripe':'')+(isToday?' today-game':'')+(done?' done-game':'')+(isCancelPending?' cancel-pending-game':'')+'"><div class="my-game-row-content">';
     html+='<div class="my-game-row-top">';
     if(isToday)html+='<span class="today-badge">TODAY</span>';
     if(done)html+='<span class="today-badge" style="background:#1a7a3c;">✓ PAID</span>';
@@ -1529,29 +1512,28 @@ function renderMyGames(){
     html+='<span class="my-game-league'+(g.league==='fhl'?' fhl':'')+'" style="background:'+roleColor+';">'+ll+'</span>';
     html+='<span style="font-size:9px;font-weight:700;background:'+roleColor+';color:#fff;border-radius:3px;padding:2px 5px;">'+roleTag+'</span></div>';
     html+='<div class="my-game-matchup">'+g.away+' vs '+g.home+'</div>';
-    const hasCancelled=isRef&&cancellations[key]&&cancellations[key].refName===official&&cancellations[key].seen===false;
-    const hasCancelledScorer=!isRef&&cancellationsScorer[key]&&cancellationsScorer[key].refName===official&&cancellationsScorer[key].seen===false;
     html+='<div class="my-game-row-bot"><span class="my-game-arena">Inwood Ice Arena</span><div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">';
-    // Show a "pending" notice if one exists, but ALWAYS also show the Cancel button —
-    // clicking it simply re-records/overwrites the cancellation, so it can never get stuck.
-    if(hasCancelled||hasCancelledScorer){
-      html+='<span style="font-size:11px;font-weight:700;color:#e08800;background:#fff8e6;border:1px solid #f0d080;border-radius:4px;padding:4px 8px;white-space:nowrap;">⏳ Cancellation pending</span>';
-    }
-    if(isRef){
-      html+='<button class="cancel-game-btn" onclick="openCancelGame(\''+sk+'\')">✖ Cancel</button>';
+    if(isCancelPending){
+      // Cancellation already sent — you're still on the hook until the commissioner
+      // acknowledges it in Pending, but there's nothing further to do here.
+      html+='<span style="font-size:11px;font-weight:700;color:#e08800;background:#fff8e6;border:1px solid #f0d080;border-radius:4px;padding:5px 10px;white-space:nowrap;">⏳ Cancellation sent — commissioner will reassign</span>';
     } else {
-      html+='<button class="cancel-game-btn" onclick="openCancelScorerGame(\''+sk+'\')">✖ Cancel</button>';
-    }
-    if(!done){
-      if(payUnlocked){
-        const fn=isRef?'refMarkDone':'scorerMarkDone';
-        html+='<button class="comm-pick-btn" style="background:#1a7a3c;color:#fff;border-color:#1a7a3c;font-size:11px;" onclick="'+fn+'(\''+sk+'\')">💵 Pay Me $'+rate+'</button>';
+      if(isRef){
+        html+='<button class="cancel-game-btn" onclick="openCancelGame(\''+sk+'\')">✖ Cancel</button>';
       } else {
-        html+='<button disabled style="font-size:11px;font-weight:700;color:#bbb;background:#f5f5f5;border:1px solid #ddd;border-radius:4px;padding:5px 10px;cursor:not-allowed;">💵 Pay Me $'+rate+'</button>';
+        html+='<button class="cancel-game-btn" onclick="openCancelScorerGame(\''+sk+'\')">✖ Cancel</button>';
       }
-    } else {
-      const fn=isRef?'refMarkUndone':'scorerMarkUndone';
-      html+='<button class="override-btn" onclick="'+fn+'(\''+sk+'\')">↺ Undo</button>';
+      if(!done){
+        if(payUnlocked){
+          const fn=isRef?'refMarkDone':'scorerMarkDone';
+          html+='<button class="comm-pick-btn" style="background:#1a7a3c;color:#fff;border-color:#1a7a3c;font-size:11px;" onclick="'+fn+'(\''+sk+'\')">💵 Pay Me $'+rate+'</button>';
+        } else {
+          html+='<button disabled style="font-size:11px;font-weight:700;color:#bbb;background:#f5f5f5;border:1px solid #ddd;border-radius:4px;padding:5px 10px;cursor:not-allowed;">💵 Pay Me $'+rate+'</button>';
+        }
+      } else {
+        const fn=isRef?'refMarkUndone':'scorerMarkUndone';
+        html+='<button class="override-btn" onclick="'+fn+'(\''+sk+'\')">↺ Undo</button>';
+      }
     }
     const logoSrc=leagueLogo(g.league);
     const logoHtml=logoSrc?'<img class="my-game-row-logo" src="'+logoSrc+'" alt="'+g.league.toUpperCase()+'">':'';
@@ -1904,15 +1886,49 @@ function renderPending(){
   document.getElementById('pending-list').innerHTML=html;
 }
 
+// Clear a pending ref/scorer cancellation record — called whenever the commissioner
+// takes an action that resolves the slot (approve someone, manual-assign, unapprove),
+// so a reassignment doesn't leave a "ghost" cancellation behind in Pending.
+function clearPendingCancellation(key){
+  if(cancellations[key]){delete cancellations[key];localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));saveCancellations();}
+}
+function clearPendingScorerCancellation(key){
+  if(cancellationsScorer[key]){delete cancellationsScorer[key];localStorage.setItem('idhf-cancels-sc',JSON.stringify(cancellationsScorer));saveCancellationsScorer();}
+}
 function dismissCancellation(ek){
   const key=decodeURIComponent(ek);
-  if(cancellations[key]){needsReplacement[key]=true;delete cancellations[key];localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));saveCancellations();fbSet('needsReplacement',needsReplacement).catch(e=>{});}
+  if(cancellations[key]){
+    const c=cancellations[key];
+    // NOW remove the assignment — the official comes off "My Games" at this point,
+    // not when they first cancelled. Flag the game as needing a replacement ref.
+    if(approved[key]===c.refName)delete approved[key];
+    if(availability[key]){availability[key]=availability[key].filter(n=>n!==c.refName);if(!availability[key].length)delete availability[key];}
+    needsReplacement[key]=true;
+    delete cancellations[key];
+    localStorage.setItem('idhf-avail',JSON.stringify(availability));
+    localStorage.setItem('idhf-approved',JSON.stringify(approved));
+    localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));
+    saveCancellations();
+    fbSet('state',{availability,approved}).catch(e=>{});
+    fbSet('needsReplacement',needsReplacement).catch(e=>{});
+  }
   updateCommPendingAlert();updateMineBadge();
   refreshCurrentTab();
 }
 function dismissScorerCancellation(ek){
   const key=decodeURIComponent(ek);
-  if(cancellationsScorer[key]){delete cancellationsScorer[key];localStorage.setItem('idhf-cancels-sc',JSON.stringify(cancellationsScorer));saveCancellationsScorer();}
+  if(cancellationsScorer[key]){
+    const c=cancellationsScorer[key];
+    // NOW remove the assignment — the official comes off "My Games" at this point.
+    if(approvedScorer[key]===c.refName)delete approvedScorer[key];
+    if(availabilityScorer[key]){availabilityScorer[key]=availabilityScorer[key].filter(n=>n!==c.refName);if(!availabilityScorer[key].length)delete availabilityScorer[key];}
+    delete cancellationsScorer[key];
+    localStorage.setItem('idhf-avail-sc',JSON.stringify(availabilityScorer));
+    localStorage.setItem('idhf-approved-sc',JSON.stringify(approvedScorer));
+    localStorage.setItem('idhf-cancels-sc',JSON.stringify(cancellationsScorer));
+    saveCancellationsScorer();
+    fbSet('stateScorer',{availabilityScorer,approvedScorer}).catch(e=>{});
+  }
   updateCommPendingAlert();updateMineBadge();
   refreshCurrentTab();
 }
@@ -2140,28 +2156,27 @@ function openCancelGame(ek){
 async function confirmCancelGame(){
   const key=_pendingCancelKey,name=selectedOfficial(),reason=document.getElementById('cancelGameReason').value.trim();
   if(!key||!name)return;
-  // Remove assignment but keep them in availability so they can re-mark if needed
-  delete approved[key];
-  if(availability[key]){availability[key]=availability[key].filter(n=>n!==name);if(!availability[key].length)delete availability[key];}
+  // Intentionally DO NOT remove the assignment here. The official remains
+  // responsible for (and sees) this game until the commissioner acknowledges
+  // the cancellation in Pending — at which point it's removed and flagged
+  // "needs replacement". This prevents a game from silently going unassigned
+  // with no one accountable in the gap before the commissioner reacts.
   // If they'd already marked this game as done/paid, reverse that — they're backing out
   const wasDone=completedOverrides[key]===true;
   if(wasDone){delete completedOverrides[key];localStorage.setItem('idhf-completed',JSON.stringify(completedOverrides));saveOverrides();}
   // Record cancellation with seen=false so commissioner sees it in Pending
   cancellations[key]={refName:name,reason:reason,timestamp:Date.now(),seen:false};
   closeModal('cancelGameModal');_pendingCancelKey=null;
-  // Save locally immediately so UI updates now
-  localStorage.setItem('idhf-avail',JSON.stringify(availability));
-  localStorage.setItem('idhf-approved',JSON.stringify(approved));
   localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));
   // Push to Firebase so commissioner sees it on their device
   try{
-    await Promise.all([fbSet('state',{availability,approved}),fbSet('cancellations',cancellations)]);
+    await saveCancellations();
     setSyncStatus('✓ Synced','#5a9a5a');setTimeout(()=>setSyncStatus('● Live','#5a9a5a'),2000);
   }catch(e){setSyncStatus('⚠ Saved locally','#c8a840');}
   updateMineBadge();updateCommPendingAlert();updateDoneBadge();
-  // Refresh My Games so the "pending" badge shows instead of cancel button
+  // Refresh My Games — game stays listed with a "Cancellation pending" notice
   renderMyGames();
-  showBanner(wasDone?'✖ Game cancelled — payment reversed, commissioner notified':'✖ Game cancelled — commissioner notified');
+  showBanner(wasDone?'✖ Cancellation sent — payment reversed. You\'re still listed for this game until the commissioner acknowledges and reassigns it.':'✖ Cancellation sent — commissioner notified. You\'re still listed for this game until they acknowledge and reassign it.');
 }
 document.getElementById('cancelGameReason').addEventListener('keydown',e=>{if(e.key==='Enter')confirmCancelGame();if(e.key==='Escape')closeModal('cancelGameModal');});
 
@@ -2183,23 +2198,20 @@ function openCancelScorerGame(ek){
 async function confirmCancelScorerGame(){
   const key=_pendingCancelScorerKey,name=selectedOfficial(),reason=document.getElementById('cancelScorerReason').value.trim();
   if(!key||!name)return;
-  delete approvedScorer[key];
-  if(availabilityScorer[key]){availabilityScorer[key]=availabilityScorer[key].filter(n=>n!==name);if(!availabilityScorer[key].length)delete availabilityScorer[key];}
+  // Intentionally DO NOT remove the assignment here — see confirmCancelGame for rationale.
   // If they'd already marked this game as done/paid, reverse that — they're backing out
   const wasDone=completedScorer[key]===true;
   if(wasDone){delete completedScorer[key];localStorage.setItem('idhf-completed-sc',JSON.stringify(completedScorer));saveScorerOverrides();}
   cancellationsScorer[key]={refName:name,role:'scorer',reason:reason,timestamp:Date.now(),seen:false};
   closeModal('cancelScorerModal');_pendingCancelScorerKey=null;
-  localStorage.setItem('idhf-avail-sc',JSON.stringify(availabilityScorer));
-  localStorage.setItem('idhf-approved-sc',JSON.stringify(approvedScorer));
   localStorage.setItem('idhf-cancels-sc',JSON.stringify(cancellationsScorer));
   try{
-    await Promise.all([fbSet('stateScorer',{availabilityScorer,approvedScorer}),fbSet('cancellationsScorer',cancellationsScorer)]);
+    await saveCancellationsScorer();
     setSyncStatus('✓ Synced','#5a9a5a');setTimeout(()=>setSyncStatus('● Live','#5a9a5a'),2000);
   }catch(e){setSyncStatus('⚠ Saved locally','#c8a840');}
   updateMineBadge();updateCommPendingAlert();updateDoneBadge();
   renderMyGames();
-  showBanner(wasDone?'✖ Scorer assignment cancelled — payment reversed, commissioner notified':'✖ Scorer assignment cancelled — commissioner notified');
+  showBanner(wasDone?'✖ Cancellation sent — payment reversed. You\'re still listed for this game until the commissioner acknowledges and reassigns it.':'✖ Cancellation sent — commissioner notified. You\'re still listed for this game until they acknowledge and reassign it.');
 }
 document.getElementById('cancelScorerReason').addEventListener('keydown',e=>{if(e.key==='Enter')confirmCancelScorerGame();if(e.key==='Escape')closeModal('cancelScorerModal');});
 
@@ -2573,14 +2585,12 @@ async function initFirebase(){
     if(cancelData&&typeof cancelData==='object'){
       cancellations={};
       Object.keys(cancelData).forEach(k=>{if(cancelData[k]&&cancelData[k].seen===false)cancellations[k]=cancelData[k];});
-      Object.keys(cancellations).forEach(k=>{if(approved[k]===cancellations[k].refName)delete approved[k];});
       localStorage.setItem('idhf-cancels',JSON.stringify(cancellations));
     }
     const cancelScData=await fbGet('cancellationsScorer');
     if(cancelScData&&typeof cancelScData==='object'){
       cancellationsScorer={};
       Object.keys(cancelScData).forEach(k=>{if(cancelScData[k]&&cancelScData[k].seen===false)cancellationsScorer[k]=cancelScData[k];});
-      Object.keys(cancellationsScorer).forEach(k=>{if(approvedScorer[k]===cancellationsScorer[k].refName)delete approvedScorer[k];});
       localStorage.setItem('idhf-cancels-sc',JSON.stringify(cancellationsScorer));
     }
     const nrData=await fbGet('needsReplacement');if(nrData){needsReplacement=nrData;localStorage.setItem('idhf-needs-replace',JSON.stringify(needsReplacement));}
