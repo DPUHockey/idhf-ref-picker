@@ -122,6 +122,7 @@
   .summary-matchup{flex:1 1 160px;color:var(--dark);min-width:0;}
   .summary-ref,.summary-scorer{font-size:11px;color:var(--dark);white-space:nowrap;flex-shrink:0;}
   .summary-unassigned{color:#c0392b;font-style:italic;}
+  .summary-pending{color:#a06000;font-style:italic;}
   .game-row{display:flex;align-items:flex-start;padding:12px 14px;border-bottom:1px solid #e8f0f5;gap:10px;}
   .game-row.game-row-highlight{animation:rowFlash 2.2s ease-out;}
   @keyframes rowFlash{0%{background:#fff3cc;}70%{background:#fff3cc;}100%{background:transparent;}}
@@ -740,6 +741,9 @@
   <!-- SUMMARY (full season, one line per game) -->
   <div class="comm-panel" id="summary-panel">
     <div class="panel-header"><span>📋 Season Summary</span><span class="range" id="summary-count"></span></div>
+    <div style="padding:8px 14px;border-bottom:1px solid var(--border);display:flex;justify-content:flex-end;">
+      <button onclick="refreshSummary()" style="font-size:11px;font-weight:700;color:var(--maroon);background:var(--maroon-light);border:1px solid #d0a0a8;border-radius:5px;padding:6px 12px;cursor:pointer;">🔄 Refresh from Server</button>
+    </div>
     <div id="summary-list"></div>
   </div>
 
@@ -883,16 +887,20 @@ async function pollFast(){
     ]);
 
     // state — handle null (deleted) as empty
-    availability=(stateRes&&stateRes.availability)||{};
-    approved=(stateRes&&stateRes.approved)||{};
-    localStorage.setItem('idhf-avail',JSON.stringify(availability));
-    localStorage.setItem('idhf-approved',JSON.stringify(approved));
+    // If a local save is currently writing to Firebase, don't let this poll's
+    // (possibly stale) read clobber the just-made local change.
+    if(!_saveInFlight){
+      availability=(stateRes&&stateRes.availability)||{};
+      approved=(stateRes&&stateRes.approved)||{};
+      localStorage.setItem('idhf-avail',JSON.stringify(availability));
+      localStorage.setItem('idhf-approved',JSON.stringify(approved));
 
-    // stateScorer
-    availabilityScorer=(scRes&&scRes.availabilityScorer)||{};
-    approvedScorer=(scRes&&scRes.approvedScorer)||{};
-    localStorage.setItem('idhf-avail-sc',JSON.stringify(availabilityScorer));
-    localStorage.setItem('idhf-approved-sc',JSON.stringify(approvedScorer));
+      // stateScorer
+      availabilityScorer=(scRes&&scRes.availabilityScorer)||{};
+      approvedScorer=(scRes&&scRes.approvedScorer)||{};
+      localStorage.setItem('idhf-avail-sc',JSON.stringify(availabilityScorer));
+      localStorage.setItem('idhf-approved-sc',JSON.stringify(approvedScorer));
+    }
 
     // cancellations
     if(cancelRes&&typeof cancelRes==='object'){
@@ -1040,7 +1048,9 @@ let archived=JSON.parse(localStorage.getItem('idhf-archived')||'{}');
 
 function saveOverrides(){localStorage.setItem('idhf-completed',JSON.stringify(completedOverrides));fbSet('completed',completedOverrides).catch(e=>console.warn(e));}
 function saveScorerOverrides(){localStorage.setItem('idhf-completed-sc',JSON.stringify(completedScorer));fbSet('completedScorer',completedScorer).catch(e=>console.warn(e));}
+let _saveInFlight=false;
 async function saveAll(){
+  _saveInFlight=true;
   localStorage.setItem('idhf-avail',JSON.stringify(availability));
   localStorage.setItem('idhf-approved',JSON.stringify(approved));
   localStorage.setItem('idhf-avail-sc',JSON.stringify(availabilityScorer));
@@ -1054,6 +1064,7 @@ async function saveAll(){
     ]);
     setSyncStatus('✓ Synced','#5a9a5a');setTimeout(()=>setSyncStatus('● Live','#5a9a5a'),2000);
   }catch(e){setSyncStatus('⚠ Local','#c8a840');}
+  finally{_saveInFlight=false;}
 }
 async function saveOfficials(){localStorage.setItem('idhf-officials',JSON.stringify(officials));try{await fbSet('officials',{list:officials});}catch(e){}}
 async function saveProfiles(){localStorage.setItem('idhf-profiles',JSON.stringify(profiles));try{await fbSet('profiles',profiles);}catch(e){}}
@@ -1739,8 +1750,12 @@ function updateCommPendingAlert(){
   const sAlert=document.getElementById('comm-pending-sc-alert');
   const sCount=document.getElementById('comm-pending-sc-count');
   if(sAlert&&sCount){sCount.textContent=pendingSc;sAlert.style.display=pendingSc>0?'':'none';}
-  // Cancellations (ref + scorer combined)
-  const cancels=Object.values(cancellations).filter(c=>c.seen===false).length+Object.values(cancellationsScorer).filter(c=>c.seen===false).length;
+  // Cancellations (ref + scorer combined) — only count "urgent" ones (within 7 days,
+  // or orphaned), matching the same filter the Pending tab uses. Otherwise a
+  // cancellation on a far-future game shows a ghost alert that never appears in Pending.
+  const cancelRefCount=Object.keys(cancellations).filter(key=>{const c=cancellations[key];if(!c||c.seen!==false)return false;const g=ag.find(g=>gameKey(g.league,g)===key);return isUrgent(g);}).length;
+  const cancelScCount=Object.keys(cancellationsScorer).filter(key=>{const c=cancellationsScorer[key];if(!c||c.seen!==false)return false;const g=ag.find(g=>gameKey(g.league,g)===key);return isUrgent(g);}).length;
+  const cancels=cancelRefCount+cancelScCount;
   const calert=document.getElementById('comm-cancel-alert');
   const ccount=document.getElementById('comm-cancel-count');
   const cplural=document.getElementById('comm-cancel-plural');
@@ -1951,6 +1966,13 @@ function renderPayroll(){
 }
 
 // ── SEASON SUMMARY (commissioner) — one line per game: date, time, league, ref, scorekeeper ──
+async function refreshSummary(){
+  setSyncStatus('Refreshing…','#c8a840');
+  await pollFast();
+  await pollSlow();
+  renderSummary();
+  setSyncStatus('✓ Synced','#5a9a5a');setTimeout(()=>setSyncStatus('● Live','#5a9a5a'),2000);
+}
 function renderSummary(){
   const ag=allGames().sort((a,b)=>a.date<b.date?-1:a.date>b.date?1:a.time<b.time?-1:1);
   document.getElementById('summary-count').textContent=ag.length+' games';
